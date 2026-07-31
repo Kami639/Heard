@@ -1,0 +1,46 @@
+@import "tailwindcss";
+
+/* HEARD — iOS dark design. SF type, true black, amber accent. */
+@theme {
+  --color-paper: #000000;      /* app background */
+  --color-card: #1c1c1e;      /* iOS secondary background */
+  --color-card2: #2c2c2e;     /* tertiary */
+  --color-ink: #ffffff;
+  --color-sub: #8e8e93;       /* iOS secondary label */
+  --color-hairline: #2c2c2e;
+  --color-accent: #ff9f0a;    /* iOS orange */
+
+  --font-body: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto, sans-serif;
+  --font-display: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI", Roboto, sans-serif;
+  --font-mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+}
+
+body {
+  background: var(--color-paper);
+  color: var(--color-ink);
+  font-family: var(--font-body);
+  -webkit-font-smoothing: antialiased;
+}
+
+.pressable {
+  transition: transform 120ms ease, opacity 120ms ease;
+}
+.pressable:active { transform: scale(0.97); opacity: 0.8; }
+
+input[type="number"]::-webkit-outer-spin-button,
+input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+
+@media (prefers-reduced-motion: reduce) {
+  * { animation: none !important; transition: none !important; }
+}
+
+@keyframes toastIn {
+  from { opacity: 0; transform: translateY(12px) scale(0.95); }
+  to { opacity: 1; transform: none; }
+}
+
+@keyframes fadeUp {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: none; }
+}
+.fade-up { animation: fadeUp 0.4s cubic-bezier(0.22, 1, 0.36, 1) both; }
