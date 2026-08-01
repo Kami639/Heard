@@ -17,7 +17,7 @@ export interface ConcertRec {
   setlist: string[];
   imageUrl?: string | null;
   photosData?: string[]; // legacy compressed dataURLs
-  media?: { id: string; type: "image" | "video"; url?: string | null }[];
+  media?: { id: string; type: "image" | "video"; url?: string | null; durationSec?: number }[];
   updatedAt?: number;
   hlc?: string;
   info?: string | null;
@@ -32,6 +32,10 @@ export interface ConcertRec {
   songGuests?: Record<string, string[]>;
   lineupChecked?: boolean;
   tourArtChecked?: boolean;
+  moments?: string[];
+  tourPosition?: { index: number; total: number };
+  encoreCount?: number;
+  ticketScanned?: boolean;
   creditsChecked?: boolean;
   creditsVersion?: number;
   geoChecked?: boolean;

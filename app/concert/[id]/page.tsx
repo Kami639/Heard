@@ -7,6 +7,7 @@ import { claimPlayback, isCurrent, playUrl, stopAudio } from "@/lib/audio";
 import { Art, Stars } from "@/components/Art";
 import { getConcerts, updateConcert, deleteConcert, daysUntil } from "@/lib/store";
 import { splitArtists } from "@/features/concerts/data";
+import { MOMENTS } from "@/lib/moments";
 import { saveMedia, getMedia, deleteMedia } from "@/lib/media";
 import { downloadShareCard } from "@/lib/shareCard";
 import { useRef } from "react";
@@ -122,7 +123,14 @@ export default function Concert({ params }: { params: Promise<{ id: string }> })
           const dt = new Date(x.date);
           return !isNaN(+dt) && dt.toDateString() === mine.toDateString();
         });
-        if (idx >= 0) setLegInfo(`Show ${idx + 1} of ${dates.length} on this tour`);
+        if (idx >= 0) {
+          setLegInfo(`Show ${idx + 1} of ${dates.length} on this tour`);
+          const pos = { index: idx + 1, total: dates.length };
+          if (cRef!.tourPosition?.index !== pos.index || cRef!.tourPosition?.total !== pos.total) {
+            updateConcert(cRef!.id, { tourPosition: pos });
+            setConcerts(getConcerts());
+          }
+        }
       })
       .catch(() => {});
   }, [cRef?.id]);
@@ -343,9 +351,19 @@ export default function Concert({ params }: { params: Promise<{ id: string }> })
         if (isVideo && f.size > 60 * 1024 * 1024) { alert(`${f.name} is over 60MB — trim it shorter.`); continue; }
         if (!isVideo && !f.type.startsWith("image/")) continue;
         const blob = isVideo ? f : await compressBlob(f);
+        let durationSec: number | undefined;
+        if (isVideo) {
+          durationSec = await new Promise<number | undefined>((res) => {
+            const v = document.createElement("video");
+            v.preload = "metadata";
+            v.onloadedmetadata = () => { res(Number.isFinite(v.duration) ? v.duration : undefined); URL.revokeObjectURL(v.src); };
+            v.onerror = () => res(undefined);
+            v.src = URL.createObjectURL(blob);
+          });
+        }
         const id = await saveMedia(blob); // local always (instant + offline)
         const url = await uploadMedia(blob, id); // cloud when signed in
-        added.push({ id, type: isVideo ? "video" : "image", url });
+        added.push({ id, type: isVideo ? "video" : "image", url, ...(durationSec ? { durationSec } : {}) });
       } catch { alert("Couldn't save that one — storage may be full."); }
     }
     if (added.length) {
@@ -694,6 +712,33 @@ export default function Concert({ params }: { params: Promise<{ id: string }> })
             </div>
           </Section>
         )}
+
+        <Section label="THAT NIGHT">
+          <p className="pb-2 text-[11px] text-sub">
+            Tap what happened — no database knows this stuff, and some achievements do.
+          </p>
+          <div className="flex flex-wrap gap-1.5">
+            {MOMENTS.map((m) => {
+              const on = (c.moments ?? []).includes(m.id);
+              return (
+                <button
+                  key={m.id}
+                  onClick={() => {
+                    const cur = new Set(c.moments ?? []);
+                    on ? cur.delete(m.id) : cur.add(m.id);
+                    updateConcert(c.id, { moments: [...cur] });
+                    setConcerts(getConcerts());
+                  }}
+                  className={`pressable rounded-full px-2.5 py-1.5 text-[11px] ${
+                    on ? "bg-accent font-semibold text-black" : "bg-card text-sub"
+                  }`}
+                >
+                  {m.icon} {m.label}
+                </button>
+              );
+            })}
+          </div>
+        </Section>
 
         <Section
           label="SETLIST"

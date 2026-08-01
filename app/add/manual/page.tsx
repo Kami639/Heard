@@ -20,6 +20,7 @@ export default function ManualAdd() {
   const [lookup, setLookup] = useState<"idle" | "loading" | "off">("idle");
   const [note, setNote] = useState<string | null>(null);
   const [scan, setScan] = useState<"idle" | "reading" | "off">("idle");
+  const [scanned, setScanned] = useState(false);
 
   const set = (k: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) =>
     setForm((f) => ({ ...f, [k]: e.target.value }));
@@ -86,6 +87,7 @@ export default function ManualAdd() {
         date: t.date || prev.date,
       }));
       setNote(`Read from your ticket${t.seat ? ` · ${t.seat}` : ""} — check it before saving.`);
+      setScanned(true);
       setScan("idle");
     } catch { setScan("idle"); setNote("Couldn't read that file."); }
   }
@@ -106,6 +108,7 @@ export default function ManualAdd() {
       year: d.getFullYear(),
       setlist: form.songs.split("\n").map((x) => x.trim()).filter(Boolean),
       rating: 5, price: 0, photos: 0, notes: "",
+      ticketScanned: scanned || undefined,
       c1: "#3a3a3c", c2: "#1c1c1e",
       initials: form.artist.trim()[0]?.toUpperCase() ?? "?",
       lat: null, lng: null,

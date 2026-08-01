@@ -5,10 +5,36 @@ import { AppShell } from "@/components/AppShell";
 import { useConcerts } from "@/lib/useConcerts";
 import { getConcerts } from "@/lib/store";
 import { ACHIEVEMENTS, tally, describe } from "@/features/achievements";
+import { splitArtists } from "@/features/concerts/data";
 import type { ConcertRec } from "@/features/concerts/data";
 
 export default function Achievements() {
   const concerts = useConcerts();
+
+  // learn artist birthdays a few at a time (MusicBrainz allows 1 req/sec)
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      let facts: Record<string, { born: string | null }> = {};
+      try { facts = JSON.parse(localStorage.getItem("heard.artistfacts.v1") ?? "{}"); } catch {}
+      const names = [...new Set(concerts.flatMap((c) => splitArtists(c.artist)))]
+        .filter((n) => !(n.toLowerCase() in facts))
+        .slice(0, 5);
+      if (!names.length) return;
+
+      for (const name of names) {
+        try {
+          const r = await fetch(`/api/artist-facts?name=${encodeURIComponent(name)}`);
+          const d = await r.json();
+          facts[name.toLowerCase()] = { born: d.born ?? null };
+        } catch { facts[name.toLowerCase()] = { born: null }; }
+      }
+      if (!alive) return;
+      try { localStorage.setItem("heard.artistfacts.v1", JSON.stringify(facts)); } catch {}
+      window.dispatchEvent(new Event("heard-sync"));
+    })();
+    return () => { alive = false; };
+  }, [concerts.length]);
 
   const { unlocked, points } = tally(concerts);
   const unlockedIds = new Set(unlocked.map((a) => a.id));

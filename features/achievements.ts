@@ -1,4 +1,5 @@
 import type { ConcertRec } from "./concerts/data";
+import { continentOf } from "@/lib/continents";
 import { splitArtists } from "./concerts/data";
 
 const norm = (x: string) => x.toLowerCase().replace(/[^a-z0-9]/g, "");
@@ -56,6 +57,8 @@ function km(a: ConcertRec, b: ConcertRec): number {
     Math.cos((a.lat * Math.PI) / 180) * Math.cos((b.lat * Math.PI) / 180) * Math.sin(dLng / 2) ** 2;
   return 2 * R * Math.asin(Math.sqrt(h));
 }
+const uniqueCount = (cs: ConcertRec[]) =>
+  new Set(attended(cs).map((c) => `${c.venue.toLowerCase()}|${c.dateDisplay}`)).size;
 const mediaCount = (c: ConcertRec) => (c.media?.length ?? 0) + (c.photosData?.length ?? 0);
 
 const FEST_RE = /fest|lolla|coachella|rolling loud|bonnaroo|dreamville|governors ball|acl|osheaga|wireless|summer smash|edc|electric daisy|flog gnaw|glastonbury|made in america|broccoli city|one musicfest|reading|leeds|sxsw/i;
@@ -104,6 +107,42 @@ const NON_MUSICIANS = [
 ];
 
 const DRILL = ["Chief Keef", "Lil Durk", "King Von", "G Herbo", "Polo G", "Fredo Santana", "Lil Reese"];
+
+/* helpers for the moments + travel badges */
+const hasMoment = (cs: ConcertRec[], id: string) =>
+  attended(cs).some((c) => (c.moments ?? []).includes(id));
+const momentCount = (cs: ConcertRec[], id: string) =>
+  attended(cs).filter((c) => (c.moments ?? []).includes(id)).length;
+
+const continents = (cs: ConcertRec[]) =>
+  new Set(attended(cs).map((c) => continentOf(c.country)).filter(Boolean) as string[]);
+
+/** Where you go out most — used as "home" for the travel badges. */
+function homeCity(cs: ConcertRec[]): ConcertRec | null {
+  const counts = new Map<string, { n: number; c: ConcertRec }>();
+  for (const c of attended(cs)) {
+    if (c.lat == null) continue;
+    const k = c.city.toLowerCase();
+    const cur = counts.get(k);
+    counts.set(k, { n: (cur?.n ?? 0) + 1, c: cur?.c ?? c });
+  }
+  return [...counts.values()].sort((a, b) => b.n - a.n)[0]?.c ?? null;
+}
+
+const MILES = 0.621371;
+
+function readLocal(key: string): string | null {
+  try { return typeof window === "undefined" ? null : localStorage.getItem(key); } catch { return null; }
+}
+
+/** Artist birthdays, warmed in the background from MusicBrainz. */
+function artistBorn(name: string): string | null {
+  try {
+    const raw = readLocal("heard.artistfacts.v1");
+    if (!raw) return null;
+    return JSON.parse(raw)[name.toLowerCase()]?.born ?? null;
+  } catch { return null; }
+}
 
 export interface Achievement {
   id: string;
@@ -415,7 +454,158 @@ export const ACHIEVEMENTS: Achievement[] = [
       for (const c of attended(cs)) for (const s of new Set(c.setlist.map(norm))) counts.set(s, (counts.get(s) ?? 0) + 1);
       return [...counts.values()].some((n) => n >= 5);
     } },
-  { id: "completionist", icon: "🏅", name: "Completionist", desc: "Unlock all 99 other achievements", pts: 250,
+  /* ── the night itself (your own tags) ─────────────────────────────── */
+  { id: "frontrow", icon: "🤝", name: "Barrier Buddy", desc: "Make it to the barricade", pts: 25,
+    test: (cs) => hasMoment(cs, "frontrow") },
+  { id: "pit", icon: "🌀", name: "Pit Survivor", desc: "Go in the mosh pit", pts: 20,
+    test: (cs) => hasMoment(cs, "pit") },
+  { id: "crowdsurf", icon: "🌊", name: "Crowd Surfer", desc: "Get carried by the crowd", pts: 25,
+    test: (cs) => hasMoment(cs, "crowdsurf") },
+  { id: "handtouch", icon: "🙌", name: "Hands Up", desc: "The artist touched your hand", pts: 30,
+    test: (cs) => hasMoment(cs, "handtouch") },
+  { id: "miccheck", icon: "🎙️", name: "Mic Check", desc: "Sing into the artist's mic", pts: 40,
+    test: (cs) => hasMoment(cs, "mic") },
+  { id: "everyword", icon: "🧠", name: "Lyric Encyclopedia", desc: "Know every word, all night", pts: 20,
+    test: (cs) => hasMoment(cs, "everyword") },
+  { id: "crew", icon: "🫂", name: "Concert Crew", desc: "10 shows with friends", pts: 25,
+    test: (cs) => momentCount(cs, "friends") >= 10 },
+  { id: "sameday", icon: "📍", name: "Wrong Place, Right Time", desc: "Tickets the same day as the show", pts: 20,
+    test: (cs) => hasMoment(cs, "lastminute") },
+  { id: "upgraded", icon: "🎲", name: "Lucky Break", desc: "Get upgraded seats", pts: 30,
+    test: (cs) => hasMoment(cs, "upgraded") },
+  { id: "sunrise", icon: "🌅", name: "Sunrise", desc: "Leave the venue after midnight", pts: 15,
+    test: (cs) => hasMoment(cs, "aftermidnight") },
+  { id: "setlistchanged", icon: "⚠️", name: "Setlist Changed", desc: "They switched it up mid-show", pts: 25,
+    test: (cs) => hasMoment(cs, "setlistchanged") },
+  { id: "raindelay", icon: "🌧️", name: "Rain Delay", desc: "Weather interrupted the show", pts: 30,
+    test: (cs) => hasMoment(cs, "raindelay") },
+  { id: "showstopped", icon: "🚨", name: "Show Stopped", desc: "The show was paused", pts: 35,
+    test: (cs) => hasMoment(cs, "stopped") },
+  { id: "fullalbum", icon: "🎼", name: "No Skips", desc: "An album played front to back", pts: 75,
+    test: (cs) => hasMoment(cs, "fullalbum") },
+  { id: "albumanniversary", icon: "💿", name: "Album Anniversary", desc: "An anniversary performance", pts: 25,
+    test: (cs) => hasMoment(cs, "anniversary") },
+  { id: "demotape", icon: "📼", name: "Demo Tape", desc: "Hear a demo or unreleased cut", pts: 20,
+    test: (cs) => hasMoment(cs, "demo") },
+  { id: "cried", icon: "😭", name: "Got Me", desc: "Cried at a show", pts: 10,
+    test: (cs) => hasMoment(cs, "cried") },
+  { id: "fellinlove", icon: "❤️", name: "Fell in Love", desc: "Went with someone you later dated", pts: 15,
+    test: (cs) => hasMoment(cs, "fellinlove") },
+  { id: "characterdev", icon: "💔", name: "Character Development", desc: "Went with someone you're no longer with", pts: 15,
+    test: (cs) => hasMoment(cs, "characterdev") },
+  { id: "film", icon: "📸", name: "Disposable", desc: "Shoot a show on film", pts: 20,
+    test: (cs) => hasMoment(cs, "film") },
+
+  /* ── tours ────────────────────────────────────────────────────────── */
+  { id: "openingnight", icon: "🎟️", name: "Opening Night", desc: "Be there for a tour's first show", pts: 30,
+    test: (cs) => attended(cs).some((c) => c.tourPosition?.index === 1) },
+  { id: "finalbow", icon: "🏁", name: "Final Bow", desc: "Be there for a tour's last show", pts: 30,
+    test: (cs) => attended(cs).some((c) => c.tourPosition && c.tourPosition.index === c.tourPosition.total) },
+  { id: "nevermissed", icon: "🗓️", name: "Never Missed a Tour", desc: "See one artist on 5 different tours", pts: 100,
+    test: (cs) => {
+      const tours = new Map<string, Set<string>>();
+      for (const c of attended(cs)) for (const a of splitArtists(c.artist)) {
+        if (!c.tour || c.tour === "Live") continue;
+        tours.set(norm(a), (tours.get(norm(a)) ?? new Set()).add(norm(c.tour)));
+      }
+      return [...tours.values()].some((set) => set.size >= 5);
+    } },
+  { id: "rideordie", icon: "👑", name: "Ride or Die", desc: "See the same artist 10 times", pts: 75,
+    test: (cs) => {
+      const counts = new Map<string, number>();
+      for (const c of attended(cs)) for (const a of splitArtists(c.artist)) {
+        counts.set(norm(a), (counts.get(norm(a)) ?? 0) + 1);
+      }
+      return [...counts.values()].some((n) => n >= 10);
+    } },
+  { id: "tourcompletionist", icon: "📅", name: "Tour Completionist", desc: "See every opener on one tour", pts: 40,
+    test: (cs) => attended(cs).some((c) => {
+      const openers = (c.openers ?? []).map(norm).filter(Boolean);
+      if (openers.length < 2) return false;
+      const billed = new Set(splitArtists(c.artist).map(norm));
+      return openers.every((o) => billed.has(o));
+    }) },
+  { id: "encore3", icon: "🎤", name: "Encore", desc: "Hear an encore of 3+ songs", pts: 20,
+    test: (cs) => attended(cs).some((c) => (c.encoreCount ?? 0) >= 3) },
+
+  /* ── travel ───────────────────────────────────────────────────────── */
+  { id: "worldtour", icon: "🌍", name: "World Tour", desc: "Shows on 4 continents", pts: 150,
+    test: (cs) => continents(cs).size >= 4 },
+  { id: "aroundtheworld", icon: "🌌", name: "Around the World", desc: "Shows on every inhabited continent", pts: 500,
+    test: (cs) => continents(cs).size >= 6 },
+  { id: "northamerican", icon: "🌎", name: "North American Tour", desc: "Shows in the US, Canada and Mexico", pts: 40,
+    test: (cs) => ["US", "CA", "MX"].every((cc) => attended(cs).some((c) => c.country === cc)) },
+  { id: "coasttocoast", icon: "🗺️", name: "Coast to Coast", desc: "Shows on both US coasts", pts: 30,
+    test: (cs) => {
+      const us = attended(cs).filter((c) => c.country === "US" && c.lng != null);
+      return us.some((c) => c.lng! < -115) && us.some((c) => c.lng! > -80);
+    } },
+  { id: "worththedrive", icon: "🛣️", name: "Worth the Drive", desc: "Travel 500+ miles for one show", pts: 25,
+    test: (cs) => {
+      const home = homeCity(cs);
+      if (!home) return false;
+      return attended(cs).some((c) => c.lat != null && km(home, c) * MILES >= 500);
+    } },
+  { id: "passport", icon: "✈️", name: "Passport Stamp", desc: "Fly to another country for a show", pts: 40,
+    test: (cs) => {
+      const home = homeCity(cs)?.country;
+      if (!home) return hasMoment(cs, "flew");
+      return attended(cs).some((c) => c.country && c.country !== home);
+    } },
+
+  /* ── the long game ────────────────────────────────────────────────── */
+  { id: "archivist", icon: "📚", name: "Archivist", desc: "Log 100 shows from your past", pts: 50,
+    test: (cs) => attended(cs).filter((c) => +new Date(c.dateDisplay) < Date.now()).length >= 100 },
+  { id: "tripledigits", icon: "🏆", name: "Triple Digits", desc: "250 shows", pts: 250,
+    test: (cs) => uniqueCount(cs) >= 250 },
+  { id: "generational", icon: "⏳", name: "Generational Run", desc: "100 shows spanning 10+ years", pts: 100,
+    test: (cs) => {
+      const ys = attended(cs).map((c) => c.year).filter(Boolean);
+      return attended(cs).length >= 100 && Math.max(...ys) - Math.min(...ys) >= 10;
+    } },
+  { id: "setlistmaster", icon: "🧩", name: "Setlist Master", desc: "1,000 different songs live", pts: 150,
+    test: (cs) => new Set(attended(cs).flatMap((c) => c.setlist.map(norm))).size >= 1000 },
+  { id: "timecapsule", icon: "⌛", name: "Time Capsule", desc: "A show exactly a year after another", pts: 20,
+    test: (cs) => {
+      const days = validDates(cs).map((d) => Math.round(+d / 86400000));
+      return days.some((a) => days.some((b) => b - a === 365 || b - a === 366));
+    } },
+  { id: "storyteller", icon: "📖", name: "Storyteller", desc: "Write a 500-character journal entry", pts: 25,
+    test: (cs) => cs.some((c) => (c.notes ?? "").trim().length >= 500) },
+  { id: "cinematic", icon: "🎥", name: "Cinematic", desc: "Save a video a minute or longer", pts: 15,
+    test: (cs) => cs.some((c) => (c.media ?? []).some((m) => (m.durationSec ?? 0) >= 60)) },
+  { id: "everydetail", icon: "🕰️", name: "Every Detail", desc: "One show with rating, price, notes and media", pts: 30,
+    test: (cs) => attended(cs).some((c) =>
+      c.rating > 0 && c.price > 0 && (c.notes ?? "").trim().length > 0 && mediaCount(c) > 0) },
+  { id: "perfectarchive", icon: "💯", name: "Perfect Archive", desc: "20 fully documented shows", pts: 75,
+    test: (cs) => attended(cs).filter((c) =>
+      c.rating > 0 && c.price > 0 && (c.notes ?? "").trim().length > 0 && mediaCount(c) > 0).length >= 20 },
+  { id: "ticketcollector", icon: "🎫", name: "Ticket Collector", desc: "Scan 10 tickets", pts: 20,
+    test: (cs) => cs.filter((c) => c.ticketScanned).length >= 10 },
+  { id: "cancelled", icon: "❌", name: "So Close", desc: "A show you logged got cancelled", pts: 15,
+    test: (cs) => cs.some((c) => c.cancelled) },
+
+  /* ── birthdays ────────────────────────────────────────────────────── */
+  { id: "birthdayshow", icon: "🎂", name: "Birthday Show", desc: "See a show on your birthday", pts: 20,
+    test: (cs) => {
+      const bday = readLocal("heard.birthday");
+      if (!bday) return false;
+      const [, m, d] = bday.split("-");
+      return validDates(cs).some((x) =>
+        x.getMonth() + 1 === Number(m) && x.getDate() === Number(d));
+    } },
+  { id: "birthdayperformer", icon: "🎁", name: "Birthday Performer", desc: "See an artist on THEIR birthday", pts: 30,
+    test: (cs) => attended(cs).some((c) => {
+      const show = new Date(c.dateDisplay);
+      if (isNaN(+show)) return false;
+      return splitArtists(c.artist).some((a) => {
+        const born = artistBorn(a);
+        if (!born) return false;
+        const [, m, d] = born.split("-");
+        return Number(m) === show.getMonth() + 1 && Number(d) === show.getDate();
+      });
+    }) },
+  { id: "completionist", icon: "🏅", name: "Completionist", desc: "Unlock every other achievement", pts: 250,
     test: (cs) => {
       const others = ACHIEVEMENTS.filter((a) => a.id !== "completionist");
       return others.length > 0 && others.every((a) => { try { return a.test(cs); } catch { return false; } });

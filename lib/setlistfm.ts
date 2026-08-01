@@ -15,6 +15,7 @@ export interface SetlistResult {
   city: string;
   country: string;
   songArtists?: Record<string, string>;
+  encoreCount?: number;
   openers?: string[];
   attendance?: string | null;
   wikiSourced?: boolean;

@@ -31,6 +31,7 @@ interface Result {
   guests?: string[];
   country?: string;
   songArtists?: Record<string, string>;
+  encoreCount?: number;
   openers?: string[];
   attendance?: string | null;
   wikiSourced?: boolean;
@@ -181,6 +182,7 @@ export default function Add() {
           city: r.city,
           country: r.country ?? undefined,
           songArtists: r.songArtists ?? undefined,
+          encoreCount: r.setlist.filter((x: any) => x.encore).length || undefined,
           openers: r.openers ?? undefined,
           attendance: r.attendance ?? undefined,
           wikiSourced: r.wikiSourced ?? undefined,

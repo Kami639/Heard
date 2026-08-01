@@ -175,6 +175,11 @@ export default function Profile() {
   }
 
   const [wipeStep, setWipeStep] = useState<0 | 1 | 2>(0);
+  const [birthday, setBirthday] = useState("");
+
+  useEffect(() => {
+    try { setBirthday(localStorage.getItem("heard.birthday") ?? ""); } catch {}
+  }, []);
   const [shareCode, setShareCode] = useState<string | null>(null);
   const [friendList, setFriendList] = useState<{ code: string; name: string }[]>([]);
   const [lookup, setLookup] = useState("");
@@ -410,6 +415,21 @@ export default function Profile() {
           <LcdStat label="Spent" value={`$${attended.reduce((s, c) => s + c.price, 0)}`} />
           <LcdStat label="Songs heard" value={attended.reduce((s, c) => s + c.setlist.length, 0)} />
         </div>
+        <div className="rounded-2xl bg-card p-4">
+          <p className="text-[15px] font-semibold">Your birthday</p>
+          <p className="pt-1 text-xs text-sub">Only used to spot shows you saw on your birthday. Stays on your device.</p>
+          <input
+            type="date"
+            value={birthday}
+            onChange={(e) => {
+              setBirthday(e.target.value);
+              try { localStorage.setItem("heard.birthday", e.target.value); } catch {}
+              window.dispatchEvent(new Event("heard-sync"));
+            }}
+            className="mt-3 w-full rounded-lg bg-card2 px-3 py-2 text-[15px] text-ink outline-none"
+          />
+        </div>
+
         <div className="rounded-2xl bg-card p-4">
           <p className="text-[15px] font-semibold">Share your archive</p>
           <p className="pt-1 text-xs text-sub">
