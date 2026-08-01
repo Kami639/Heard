@@ -235,37 +235,61 @@ function datesFromHtml(html: string): TourDate[] {
   });
 }
 
-/** Parse per-artist set lists (bolded "<name> set" headings followed by # items). */
+/** Per-artist set lists.
+ *
+ *  Articles label these two ways, often on the same page:
+ *    ;Drake        (or '''Drake''')
+ *    This set list is representative of the songs Drake performed in Chicago...
+ *    # "Marvins Room"
+ *
+ *  Taking the artist from the heading OR that sentence is what makes joint
+ *  sets ("Drake & 21 Savage") land on the right people instead of everything
+ *  defaulting to the headliner. */
 function parseSets(wikitext: string): TourSet[] {
   const idx = wikitext.search(/==+\s*Set ?list/i);
   if (idx < 0) return [];
-  const section = wikitext.slice(idx, idx + 9000).split(/\n==[^=]/)[0];
+  const section = wikitext.slice(idx, idx + 14000).split(/\n==[^=]/)[0];
 
   const sets: TourSet[] = [];
   let current: TourSet | null = null;
+
+  const startSet = (artist: string | null) => {
+    const name = artist ? clean(artist).replace(/\s+set$/i, "").trim() : null;
+    if (current && current.artist === name) return;
+    current = { artist: name, songs: [] };
+    sets.push(current);
+  };
+
   for (const raw of section.split("\n")) {
     const line = raw.trim();
     if (!line) continue;
-    const heading = line.match(/^(?:'''|;)\s*(.+?)\s*(?:'''|:)?\s*$/);
-    if (heading && !line.startsWith("#") && /set$/i.test(clean(heading[1]))) {
-      current = { artist: clean(heading[1]).replace(/\s+set$/i, ""), songs: [] };
-      sets.push(current);
+
+    // "...the songs 21 Savage performed in Chicago on July 5, 2023"
+    const sentence = line.match(/songs\s+(.+?)\s+performed/i);
+    if (sentence && !line.startsWith("#")) { startSet(sentence[1]); continue; }
+
+    const heading = line.match(/^(?:;|'{3}|={2,6})\s*([^'=;][^'=]*?)\s*(?:'{3}|={2,6}|:)?\s*$/);
+    if (heading && !line.startsWith("#")) {
+      const label = clean(heading[1]);
+      if (!label || label.length > 60) continue;
+      // an encore still belongs to whoever is currently on stage
+      if (/^(encore|set ?list|notes?|this set)/i.test(label)) continue;
+      startSet(label);
       continue;
     }
+
     if (!line.startsWith("#")) continue;
-    const song = clean(line.replace(/^#+\s*/, ""))
-      .replace(/"/g, "")
-      .replace(/\s*\/\s*/g, " / ")
-      .trim();
+    const song = clean(line.replace(/^#+\s*/, "")).replace(/"/g, "").replace(/\s*\/\s*/g, " / ").trim();
     if (!song) continue;
-    if (!current) { current = { artist: null, songs: [] }; sets.push(current); }
-    current.songs.push(song);
+    if (!current) startSet(null);
+    current!.songs.push(song);
   }
-  return sets.filter((x) => x.songs.length).slice(0, 8);
+
+  return sets.filter((x) => x.songs.length).slice(0, 10);
 }
 
-/** Last few failures, surfaced through /api/tour?debug=1 so problems are
- *  visible instead of silently becoming "no tour details found". */
+/** Recent failures, surfaced through /api/tour?debug=1 and the Profile
+ *  diagnostics so Wikipedia problems are visible instead of silent. */
 export const wikiTrace: { step: string; detail: string; at: number }[] = [];
 function trace(step: string, detail: string) {
   wikiTrace.unshift({ step, detail, at: Date.now() });
