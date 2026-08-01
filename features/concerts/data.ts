@@ -4,6 +4,7 @@ export interface ConcertRec {
   tour: string;
   venue: string;
   city: string;
+  country?: string;
   dateDisplay: string;
   year: number;
   rating: number;
@@ -16,9 +17,27 @@ export interface ConcertRec {
   setlist: string[];
   imageUrl?: string | null;
   photosData?: string[]; // legacy compressed dataURLs
-  media?: { id: string; type: "image" | "video" }[];
+  media?: { id: string; type: "image" | "video"; url?: string | null }[];
+  updatedAt?: number;
+  info?: string | null;
+  genres?: string[];
+  covers?: Record<string, string>; // song -> original artist
+  guests?: string[]; // artists who pulled up mid-set
+  songArtists?: Record<string, string>; // song -> who performed it
+  openers?: string[];
+  attendance?: string | null;
+  wikiSourced?: boolean;
+  setlistFromWiki?: boolean;
+  songGuests?: Record<string, string[]>;
+  lineupChecked?: boolean;
+  tourArtChecked?: boolean;
+  creditsChecked?: boolean;
+  geoChecked?: boolean;
+  geoApprox?: boolean;
   lat?: number | null;
   lng?: number | null;
+  cancelled?: boolean;
+  artists?: { name: string; imageUrl?: string | null }[];
 }
 
 export const SEED_CONCERTS: ConcertRec[] = [];
@@ -43,3 +62,53 @@ export const MOCK_SEARCH: Omit<ConcertRec, "rating" | "price" | "photos" | "note
     setlist: ["AMERIICAN REQUIEM","TEXAS HOLD 'EM","16 CARRIAGES","JOLENE"],
   },
 ];
+
+/** "Chris Brown & Usher" / "Teezo x Tyler" -> ["Chris Brown", "Usher"] */
+export function splitArtists(name: string): string[] {
+  return name
+    .split(/\s*(?:&|\+|,|\/)\s*|\s+(?:and|x|con)\s+/i)
+    .map((x) => x.trim())
+    .filter((x) => x && !/^(more|others)$/i.test(x))
+    .slice(0, 4);
+}
+
+/** Setlist entries that are actually notes, not songs
+ *  ("This set was cancelled due to weather...", etc.) */
+export function isNoteEntry(name: string): boolean {
+  return (
+    name.length > 70 ||
+    /\b(cancell?ed|postponed|cut short|did not perform|no setlist|confirmed by)\b/i.test(name)
+  );
+}
+
+const cleanName = (x: string) => x.replace(/[\u00A0\u2000-\u200B]/g, " ").replace(/\s+/g, " ").trim();
+
+/** Runs on every read: strips note entries, flags cancellations, and
+ *  normalizes names (whitespace ghosts) — auto-corrects existing archives. */
+export function sanitizeConcert(c: ConcertRec): ConcertRec {
+  const notes = c.setlist.filter(isNoteEntry);
+  const cleaned: ConcertRec = {
+    ...c,
+    artist: cleanName(c.artist),
+    tour: cleanName(c.tour ?? ""),
+    venue: cleanName(c.venue),
+    city: cleanName(c.city),
+    artists: c.artists?.map((a) => ({ ...a, name: cleanName(a.name) })),
+  };
+  if (!notes.length) return cleaned;
+  return {
+    ...cleaned,
+    setlist: cleaned.setlist.filter((s) => !isNoteEntry(s)),
+    info: cleaned.info ?? notes.join(" · "),
+    cancelled: cleaned.cancelled || notes.some((n) => /cancell?ed|postponed/i.test(n)),
+  };
+}
+
+/** One event = one show, even if it was logged per-artist (festival days,
+ *  multi-headliner tours). Keyed by venue + date. */
+export function uniqueShowCount(cs: ConcertRec[]): number {
+  return new Set(
+    cs.filter((c) => !c.cancelled)
+      .map((c) => `${c.venue.toLowerCase().replace(/\s+/g, "")}|${c.dateDisplay}`)
+  ).size;
+}

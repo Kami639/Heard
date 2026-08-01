@@ -14,10 +14,17 @@ export interface SetlistResult {
   venue: string;
   city: string;
   country: string;
+  songArtists?: Record<string, string>;
+  openers?: string[];
+  attendance?: string | null;
+  wikiSourced?: boolean;
+  setlistFromWiki?: boolean;
+  cancelledShow?: boolean;
   date: string; // ISO yyyy-mm-dd
   setlist: SetlistSong[];
   lat: number | null;
   lng: number | null;
+  info: string | null;
 }
 
 export async function searchSetlists(params: {
@@ -54,16 +61,21 @@ export async function searchSetlists(params: {
   if (!res.ok) throw new Error(`setlist.fm ${res.status}`);
 
   const data = await res.json();
-  return (data.setlist ?? []).map(mapSetlist);
+  return mapSetlists(data.setlist ?? []);
+}
+
+function mapSetlists(list: any[]): SetlistResult[] {
+  return list.map(mapSetlist);
 }
 
 function mapSetlist(s: any): SetlistResult {
   const songs: SetlistSong[] = (s.sets?.set ?? []).flatMap(
     (set: any, i: number) =>
-      (set.song ?? []).map((song: any) => ({
+      (set.song ?? []).filter((song: any) => !song.tape).map((song: any) => ({
         name: song.name,
         encore: Boolean(set.encore) || i > 0 && Boolean(set.encore),
         cover: song.cover?.name ?? null,
+        withGuest: song.with?.name ?? null,
       }))
   );
   // dd-MM-yyyy -> ISO
@@ -79,5 +91,53 @@ function mapSetlist(s: any): SetlistResult {
     setlist: songs,
     lat: s.venue?.city?.coords?.lat ?? null,
     lng: s.venue?.city?.coords?.long ?? null,
+    info: s.info ?? null,
   };
+}
+
+/** Resolve an artist to their MusicBrainz id — the only way to get an
+ *  EXACT artist match out of setlist.fm (artistName search is fuzzy and will
+ *  happily return a venue called "Divadlo Drak" for "Drake"). */
+export interface ArtistCandidate { mbid: string; name: string }
+
+/** Artist candidates from setlist.fm, so callers can judge exactness. */
+export async function searchArtistCandidates(name: string): Promise<ArtistCandidate[]> {
+  const key = process.env.SETLISTFM_API_KEY;
+  if (!key) return [];
+  const qs = new URLSearchParams({ artistName: name, sort: "relevance", p: "1" });
+  const res = await fetch(`https://api.setlist.fm/rest/1.0/search/artists?${qs}`, {
+    headers: { "x-api-key": key, Accept: "application/json" },
+    next: { revalidate: 86400 },
+  });
+  if (!res.ok) return [];
+  return ((await res.json()).artist ?? [])
+    .filter((a: any) => a?.mbid && a?.name)
+    .map((a: any) => ({ mbid: a.mbid, name: a.name }));
+}
+
+export async function findArtistMbid(name: string): Promise<string | null> {
+  const key = process.env.SETLISTFM_API_KEY;
+  if (!key) return null;
+  const qs = new URLSearchParams({ artistName: name, sort: "relevance", p: "1" });
+  const res = await fetch(`https://api.setlist.fm/rest/1.0/search/artists?${qs}`, {
+    headers: { "x-api-key": key, Accept: "application/json" },
+    next: { revalidate: 86400 },
+  });
+  if (!res.ok) return null;
+  const items = (await res.json()).artist ?? [];
+  const nk = (x: string) => x.toLowerCase().replace(/[^a-z0-9]/g, "");
+  const exact = items.find((a: any) => nk(a.name ?? "") === nk(name));
+  return (exact ?? items[0])?.mbid ?? null;
+}
+
+/** All setlists for one artist, by mbid — no fuzzy bleed. */
+export async function artistSetlists(mbid: string, p = 1): Promise<SetlistResult[]> {
+  const key = process.env.SETLISTFM_API_KEY;
+  if (!key) throw new Error("setlist.fm key missing");
+  const res = await fetch(`https://api.setlist.fm/rest/1.0/artist/${mbid}/setlists?p=${p}`, {
+    headers: { "x-api-key": key, Accept: "application/json" },
+    next: { revalidate: 3600 },
+  });
+  if (!res.ok) throw new Error(`setlist.fm ${res.status}`);
+  return mapSetlists((await res.json()).setlist ?? []);
 }

@@ -95,9 +95,10 @@ export async function downloadShareCard(c: ConcertRec) {
   const grad = x.createLinearGradient(ax, ay, ax + size, ay + size);
   grad.addColorStop(0, c.c1); grad.addColorStop(1, c.c2);
   x.fillStyle = grad; x.fillRect(ax, ay, size, size);
-  if (c.imageUrl) {
+  const cardImage = c.imageUrl ?? c.artists?.find((a) => a.imageUrl)?.imageUrl ?? null;
+  if (cardImage) {
     try {
-      const img = await loadImage(c.imageUrl);
+      const img = await loadImage(cardImage);
       const s = Math.max(size / img.width, size / img.height);
       x.drawImage(img, ax + (size - img.width * s) / 2, ay + (size - img.height * s) / 2, img.width * s, img.height * s);
     } catch {}

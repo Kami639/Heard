@@ -2,21 +2,34 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { ChevronRight, Music2, Disc3 } from "lucide-react";
+import { ChevronRight, Music2, Disc3, Trophy, Images } from "lucide-react";
 import { AppShell } from "@/components/AppShell";
 import { Art, Stars } from "@/components/Art";
 import { LcdStat } from "@/components/lcd/LcdStat";
 import { getConcerts, daysUntil } from "@/lib/store";
+import { uniqueShowCount } from "@/features/concerts/data";
 import type { ConcertRec } from "@/features/concerts/data";
 
 export default function Home() {
   const router = useRouter();
   const [concerts, setConcerts] = useState<ConcertRec[]>([]);
-  useEffect(() => setConcerts(getConcerts()), []);
+  useEffect(() => {
+    const load = () => setConcerts(getConcerts());
+    load();
+    window.addEventListener("heard-sync", load);
+    return () => window.removeEventListener("heard-sync", load);
+  }, []);
 
+  const attended = concerts.filter((c) => !c.cancelled);
   const latest = concerts[0];
-  const cities = new Set(concerts.map((c) => c.city)).size;
-  const songs = concerts.reduce((s, c) => s + c.setlist.length, 0);
+  const cities = new Set(attended.map((c) => c.city)).size;
+  const today = new Date();
+  const capsule = attended.find((c) => {
+    const d = new Date(c.dateDisplay);
+    return !isNaN(+d) && d.getMonth() === today.getMonth() && d.getDate() === today.getDate() && d.getFullYear() < today.getFullYear();
+  });
+  const capsuleYears = capsule ? today.getFullYear() - new Date(capsule.dateDisplay).getFullYear() : 0;
+  const songs = attended.reduce((s, c) => s + c.setlist.length, 0);
 
   return (
     <AppShell count={concerts.length}>
@@ -26,7 +39,7 @@ export default function Home() {
             onClick={() => router.push(`/concert/${latest.id}`)}
             className="pressable overflow-hidden rounded-2xl bg-card text-left"
           >
-            <Art c1={latest.c1} c2={latest.c2} initials={latest.initials} imageUrl={latest.imageUrl} className="rounded-none border-0" />
+            <Art c1={latest.c1} c2={latest.c2} initials={latest.initials} imageUrl={latest.imageUrl} artists={latest.artists} className="rounded-none border-0" />
             <div className="flex items-center justify-between p-4">
               <div>
                 <div className="font-display text-xl font-bold">{latest.artist}</div>
@@ -34,7 +47,7 @@ export default function Home() {
                 <div className="mt-0.5 text-xs text-sub">{latest.city} · {latest.dateDisplay}</div>
                 {daysUntil(latest.dateDisplay) !== null && (
                   <span className="mt-1 inline-block rounded-full bg-accent/15 px-2.5 py-0.5 text-xs font-semibold text-accent">
-                    in {daysUntil(latest.dateDisplay)} days
+                    in {daysUntil(latest.dateDisplay)} {daysUntil(latest.dateDisplay) === 1 ? "day" : "days"}
                   </span>
                 )}
               </div>
@@ -52,8 +65,19 @@ export default function Home() {
           </button>
         )}
 
+        {capsule && (
+          <button
+            onClick={() => router.push(`/concert/${capsule.id}`)}
+            className="pressable fade-up rounded-2xl bg-card p-4 text-left"
+          >
+            <p className="text-xs font-semibold tracking-wide text-accent">⏳ ON THIS NIGHT</p>
+            <p className="pt-1 text-[15px]">
+              <span className="font-semibold">{capsuleYears} {capsuleYears === 1 ? "year" : "years"} ago</span> — {capsule.artist} · {capsule.city}
+            </p>
+          </button>
+        )}
         <div className="grid grid-cols-3 gap-3">
-          <LcdStat label="Shows" value={concerts.length} />
+          <LcdStat label="Shows" value={uniqueShowCount(concerts)} />
           <LcdStat label="Cities" value={cities} />
           <LcdStat label="Songs" value={songs} />
         </div>
@@ -62,6 +86,8 @@ export default function Home() {
           {[
             { label: "Songs Heard", href: "/songs", icon: Music2 },
             { label: "Wrapped", href: "/wrapped", icon: Disc3 },
+            { label: "Achievements", href: "/achievements", icon: Trophy },
+            { label: "Gallery", href: "/gallery", icon: Images },
           ].map(({ label, href, icon: Icon }, i, arr) => (
             <button
               key={href}

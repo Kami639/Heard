@@ -18,4 +18,5 @@ export interface SetlistSong {
   name: string;
   encore: boolean;
   cover: string | null; // original artist if a cover
+  withGuest?: string | null; // guest artist who came out for this song
 }

@@ -6,12 +6,17 @@ import { ChevronRight } from "lucide-react";
 import { AppShell } from "@/components/AppShell";
 import { Art, Stars } from "@/components/Art";
 import { getConcerts } from "@/lib/store";
-import type { ConcertRec } from "@/features/concerts/data";
+import { splitArtists, type ConcertRec } from "@/features/concerts/data";
 
 export default function Archive() {
   const router = useRouter();
   const [concerts, setConcerts] = useState<ConcertRec[]>([]);
-  useEffect(() => setConcerts(getConcerts()), []);
+  useEffect(() => {
+    const load = () => setConcerts(getConcerts());
+    load();
+    window.addEventListener("heard-sync", load);
+    return () => window.removeEventListener("heard-sync", load);
+  }, []);
 
   const byYear = new Map<number, ConcertRec[]>();
   for (const c of concerts) {
@@ -35,10 +40,15 @@ export default function Archive() {
                   onClick={() => router.push(`/concert/${c.id}`)}
                   className={`pressable flex w-full items-center gap-3 px-4 py-3 text-left ${i < arr.length - 1 ? "border-b border-hairline" : ""}`}
                 >
-                  <div className="w-12 shrink-0"><Art c1={c.c1} c2={c.c2} initials={c.initials} imageUrl={c.imageUrl} className="rounded-xl" /></div>
+                  <div className="w-12 shrink-0"><Art c1={c.c1} c2={c.c2} initials={c.initials} imageUrl={c.imageUrl} artists={c.artists} className="rounded-xl" /></div>
                   <div className="min-w-0 flex-1">
                     <div className="truncate font-display text-[15px] font-semibold">{c.artist}</div>
-                    <div className="truncate text-xs text-sub">{c.tour}</div>
+                    <div
+                  onClick={(e) => { e.stopPropagation(); if (c.tour) router.push(`/tour/${encodeURIComponent(c.tour)}?artist=${encodeURIComponent(splitArtists(c.artist)[0] ?? c.artist)}`); }}
+                  className="truncate text-xs text-sub hover:text-accent"
+                >
+                  {c.tour}
+                </div>
                     <div className="text-xs text-sub">{c.city} · {c.dateDisplay}</div>
                   </div>
                   <div className="flex shrink-0 items-center gap-1">

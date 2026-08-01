@@ -51,3 +51,30 @@ input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; marg
   from { height: 4px; }
   to { height: 14px; }
 }
+
+/* Desktop affordances. Tailwind v4 gives buttons the default arrow cursor,
+   which makes an app feel unresponsive on a PC. */
+button:not(:disabled),
+[role="button"],
+label:has(> input[type="file"]),
+summary,
+select {
+  cursor: pointer;
+}
+button:disabled { cursor: not-allowed; }
+
+@media (hover: hover) {
+  .pressable:hover { opacity: 0.88; }
+  a:hover { opacity: 0.9; }
+}
+
+/* visible keyboard focus */
+button:focus-visible,
+a:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible {
+  outline: 2px solid var(--accent, #ff9f0a);
+  outline-offset: 2px;
+  border-radius: 8px;
+}

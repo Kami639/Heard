@@ -1,7 +1,7 @@
 "use client";
 
 import { usePathname, useRouter } from "next/navigation";
-import { Home, LibraryBig, Music2, Map, Disc3, User, Plus } from "lucide-react";
+import { Home, LibraryBig, Music2, Map, Disc3, User, Plus, Trophy, Images } from "lucide-react";
 
 const ITEMS = [
   { href: "/", icon: Home, label: "Home" },
@@ -9,6 +9,8 @@ const ITEMS = [
   { href: "/songs", icon: Music2, label: "Songs Heard" },
   { href: "/map", icon: Map, label: "Map" },
   { href: "/wrapped", icon: Disc3, label: "Wrapped" },
+  { href: "/gallery", icon: Images, label: "Gallery" },
+  { href: "/achievements", icon: Trophy, label: "Achievements" },
   { href: "/profile", icon: User, label: "Profile" },
 ];
 

@@ -24,11 +24,15 @@ export function LcdStat({ label, value }: { label: string; value: string | numbe
     return () => cancelAnimationFrame(raf);
   }, [target]);
 
-  const display = target === null ? str : `${m![1]}${n.toLocaleString()}${m![3]}`;
+  // Only group digits if the source did (or it's a genuinely big count) —
+  // years like 2026 must never become "2,026".
+  const grouped = m ? m[2].includes(",") || (target ?? 0) >= 10000 : false;
+  const display = target === null ? str : `${m![1]}${grouped ? n.toLocaleString() : String(n)}${m![3]}`;
+  const size = display.length > 10 ? 17 : display.length > 7 ? 21 : 26;
 
   return (
     <div className="flex flex-col gap-0.5 rounded-2xl bg-card p-4">
-      <span className="font-display text-[26px] font-bold leading-tight text-accent">{display}</span>
+      <span className="font-display font-bold leading-tight text-accent" style={{ fontSize: size }}>{display}</span>
       <span className="text-xs font-medium text-sub">{label}</span>
     </div>
   );
