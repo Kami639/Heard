@@ -94,6 +94,13 @@ export default function Add() {
         return;
       }
 
+      // popularity map so the "real" Drake beats Drake Milligan
+      let popMap: Record<string, number> = {};
+      try {
+        const pr = await fetch(`/api/artists?name=${encodeURIComponent(query)}`);
+        for (const a of (await pr.json()).artists ?? []) popMap[a.name.toLowerCase()] = a.popularity ?? 0;
+      } catch {}
+
       const combos = [...new Set(raw.map((r: any) => `${r.artist}::${r.tour ?? ""}`))] as string[];
       const imgs: Record<string, string | null> = {};
       await Promise.all(combos.map(async (key) => {
@@ -121,6 +128,15 @@ export default function Add() {
           imageUrl: imgs[`${r.artist}::${r.tour ?? ""}`],
           lat: r.lat, lng: r.lng,
         };
+      });
+      mapped.sort((a, b) => {
+        const qa = a.artist.toLowerCase() === query.toLowerCase() ? 1 : 0;
+        const qb = b.artist.toLowerCase() === query.toLowerCase() ? 1 : 0;
+        if (qa !== qb) return qb - qa; // exact name match first
+        const pa = popMap[a.artist.toLowerCase()] ?? -1;
+        const pb = popMap[b.artist.toLowerCase()] ?? -1;
+        if (pa !== pb) return pb - pa; // then by popularity
+        return +new Date(b.dateDisplay) - +new Date(a.dateDisplay); // then newest
       });
       setTypeahead([]);
       setResults(append ? (prev) => [...prev, ...mapped] as any : mapped);

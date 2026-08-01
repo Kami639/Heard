@@ -1,51 +1,42 @@
-# Heard
+# heard
 
-A personal archive of every live music experience you've had.
-Letterboxd for concerts — designed like an old iPod that's been upgraded for 2026.
+**A personal archive of every live music experience you've had.**
+Letterboxd for concerts — log every show, and over time it becomes a timeline of your life through live music.
 
-## Setup
+**🔴 Live: [heard-beryl.vercel.app](https://heard-beryl.vercel.app)**
 
-1. `npm install`
-2. Copy `.env.example` to `.env.local` and fill in:
-   - `SETLISTFM_API_KEY` — free non-commercial key from setlist.fm (approval is quick)
-   - Supabase URL + anon key
-3. `npm run dev`
+![screenshots coming soon](docs/screenshots.png)
 
-## How setlist auto-import works
+## What it does
 
-- The client never touches setlist.fm directly. It calls `/api/setlist/search?artist=...&date=...`,
-  which proxies through `lib/setlistfm.ts` so the API key stays server-side.
-- Responses are cached for 1 hour (`next.revalidate`) because the free tier is ~2 req/sec.
-- setlist.fm returns **404 for zero results** — the wrapper maps that to an empty array.
-- Setlists are community-contributed, so last night's show may be missing for a day or two.
-  Show "Setlist not available yet. Retry sync?" instead of an error.
-- Attribution to setlist.fm in the UI is required by their terms.
+- **10-second logging** — search any artist, tour, or festival and the show's setlist, venue, date, and album artwork auto-import from setlist.fm + Spotify
+- **Smart search** — one box searches artists, tours, and festivals simultaneously, with Spotify-powered typeahead and "did you mean" corrections
+- **Memories, not data** — rate shows, log what you spent, write journal entries, upload photos (rendered as tilted polaroids)
+- **Map** — every venue you've been to as glowing pins on a dark world map, auto-geolocated
+- **Songs Heard** — every song you've ever heard live, ranked by play count
+- **Wrapped** — yearly recaps: shows, cities, hours of live music, top artists leaderboard
+- **Share cards** — story-sized PNGs generated on a canvas, shared through the native share sheet
 
-## Design system
+## Design
 
-Tokens live in `app/globals.css` (`@theme`): paper `#F5F2EA`, card `#ECE6DA`,
-ink `#1E1E1E`, hairline `#B9B2A6`, LCD green for stats. IBM Plex Sans (body),
-Archivo (display), IBM Plex Mono (data). Every page gets paper grain + vignette
-via the `.grain` class. Buttons use `.pressable` — they sink, never glow.
+Two outfits, one app:
+- **Phone** — iOS-native feel: SF type, true black, amber accent, bottom tab bar
+- **Desktop** — a macOS window: traffic lights, translucent sidebar, floating on a dark desktop
 
-## Structure
+## Stack
 
-```
-app/                  routes (home = boot + iPod menu)
-  api/setlist/search  server proxy for setlist.fm
-components/
-  ipod/               ClickWheel — the signature element
-  lcd/                LcdStat — dashboard numbers as tiny LCDs
-  cassette/           CassetteCard — timeline rows as tapes
-features/concerts/    domain types
-lib/setlistfm.ts      API wrapper (server-only)
-public/textures/      grain.svg
+Next.js 15 (App Router) · TypeScript · Tailwind CSS v4 · Leaflet · Canvas API · setlist.fm API · Spotify Web API · deployed on Vercel
+
+## Run it locally
+
+```bash
+npm install
+cp .env.example .env.local   # add your setlist.fm + Spotify keys
+npm run dev
 ```
 
-## Next steps
+Works without keys in demo mode.
 
-- [ ] Supabase schema: `concerts`, `photos`, `songs_heard` + RLS per user
-- [ ] Add-concert flow: search → pick show → autofilled concert page
-- [ ] /archive (cassette timeline), /wrapped (CD-insert animation), map view
-- [ ] Photo upload (Supabase Storage) with polaroid rendering
-- [ ] Shareable recap cards (og-image route)
+## Credits
+
+Concert data from [setlist.fm](https://www.setlist.fm) · Artist images from [Spotify](https://developer.spotify.com) · Map tiles © OpenStreetMap / CARTO

@@ -28,6 +28,7 @@ export interface ArtistInfo {
   name: string;
   imageUrl: string | null;
   genres: string[];
+  popularity?: number;
 }
 
 export async function searchArtist(name: string): Promise<ArtistInfo | null> {
@@ -100,5 +101,6 @@ export async function suggestArtists(name: string, limit = 5): Promise<ArtistInf
     name: a.name,
     imageUrl: a.images?.at(-1)?.url ?? a.images?.[0]?.url ?? null,
     genres: a.genres ?? [],
+    popularity: a.popularity ?? 0,
   }));
 }
