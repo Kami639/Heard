@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { AppShell } from "@/components/AppShell";
 import { getConcerts } from "@/lib/store";
+import { useRef } from "react";
 
 interface SongCount { song: string; artist: string; count: number }
 
@@ -11,6 +12,34 @@ export default function Songs() {
   const router = useRouter();
   const [songs, setSongs] = useState<SongCount[]>([]);
   const [total, setTotal] = useState(0);
+  const [playingKey, setPlayingKey] = useState<string | null>(null);
+  const [loadingKey, setLoadingKey] = useState<string | null>(null);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const cache = useRef<Record<string, string | null>>({});
+
+  async function toggle(song: string, artist: string) {
+    const key = `${song}::${artist}`;
+    if (playingKey === key) { audioRef.current?.pause(); audioRef.current = null; setPlayingKey(null); return; }
+    audioRef.current?.pause(); audioRef.current = null; setPlayingKey(null);
+    setLoadingKey(key);
+    let url = cache.current[key];
+    if (url === undefined) {
+      try {
+        const r = await fetch(`/api/preview?song=${encodeURIComponent(song)}&artist=${encodeURIComponent(artist)}`);
+        url = (await r.json()).previewUrl ?? null;
+      } catch { url = null; }
+      cache.current[key] = url;
+    }
+    setLoadingKey(null);
+    if (!url) return;
+    const audio = new Audio(url);
+    audio.onended = () => setPlayingKey(null);
+    audioRef.current = audio;
+    setPlayingKey(key);
+    audio.play().catch(() => setPlayingKey(null));
+  }
+
+  useEffect(() => () => { audioRef.current?.pause(); }, []);
 
   useEffect(() => {
     const concerts = getConcerts();
@@ -39,16 +68,25 @@ export default function Songs() {
             Nothing heard yet.<br />Add a concert with a setlist.
           </p>
         )}
-        {songs.map((s, i) => (
-          <div key={s.song + s.artist} className="flex items-baseline gap-3 border-b border-hairline/50 py-1.5">
-            <span className="w-6 shrink-0 text-right font-mono text-[11px] text-sub">{i + 1}</span>
-            <div className="min-w-0 flex-1">
-              <div className="truncate text-sm">{s.song}</div>
-              <div className="truncate font-mono text-[10px] text-sub">{s.artist}</div>
-            </div>
-            <span className="shrink-0 font-mono text-xs text-sub">×{s.count}</span>
-          </div>
-        ))}
+        {songs.map((s, i) => {
+          const key = `${s.song}::${s.artist}`;
+          return (
+            <button
+              key={key}
+              onClick={() => toggle(s.song, s.artist)}
+              className="pressable flex w-full items-center gap-3 border-b border-hairline/50 py-1.5 text-left"
+            >
+              <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-card text-[11px] text-accent">
+                {loadingKey === key ? "…" : playingKey === key ? "❚❚" : "▶"}
+              </span>
+              <div className="min-w-0 flex-1">
+                <div className={`truncate text-sm ${playingKey === key ? "font-semibold text-accent" : ""}`}>{s.song}</div>
+                <div className="truncate font-mono text-[10px] text-sub">{s.artist}</div>
+              </div>
+              <span className="shrink-0 font-mono text-xs text-sub">×{s.count}</span>
+            </button>
+          );
+        })}
       </section>
     </AppShell>
   );

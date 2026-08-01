@@ -10,7 +10,7 @@ export function Art({
     >
       {imageUrl ? (
         // eslint-disable-next-line @next/next/no-img-element
-        <img src={imageUrl} alt="" className="absolute inset-0 h-full w-full object-cover contrast-105 saturate-[0.9]" />
+        <img src={imageUrl} alt="" loading="lazy" decoding="async" className="absolute inset-0 h-full w-full object-cover contrast-105 saturate-[0.9]" />
       ) : (
         <span className="absolute inset-0 flex items-center justify-center font-display text-4xl font-extrabold text-paper/85">
           {initials}

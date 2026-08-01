@@ -12,3 +12,16 @@ export const COUNTRY_CODES: Record<string, string> = {
   "uae": "AE", "dubai": "AE", "israel": "IL", "singapore": "SG", "thailand": "TH",
   "philippines": "PH", "indonesia": "ID", "puerto rico": "PR", "jamaica": "JM",
 };
+
+export const COUNTRY_LIST: { code: string; name: string }[] = [
+  { code: "US", name: "United States" }, { code: "CA", name: "Canada" }, { code: "MX", name: "Mexico" },
+  { code: "GB", name: "United Kingdom" }, { code: "IE", name: "Ireland" }, { code: "FR", name: "France" },
+  { code: "DE", name: "Germany" }, { code: "ES", name: "Spain" }, { code: "IT", name: "Italy" },
+  { code: "PT", name: "Portugal" }, { code: "NL", name: "Netherlands" }, { code: "BE", name: "Belgium" },
+  { code: "CH", name: "Switzerland" }, { code: "AT", name: "Austria" }, { code: "SE", name: "Sweden" },
+  { code: "NO", name: "Norway" }, { code: "DK", name: "Denmark" }, { code: "PL", name: "Poland" },
+  { code: "BR", name: "Brazil" }, { code: "AR", name: "Argentina" }, { code: "CO", name: "Colombia" },
+  { code: "CL", name: "Chile" }, { code: "JP", name: "Japan" }, { code: "KR", name: "South Korea" },
+  { code: "AU", name: "Australia" }, { code: "NZ", name: "New Zealand" }, { code: "ZA", name: "South Africa" },
+  { code: "AE", name: "UAE" }, { code: "SG", name: "Singapore" }, { code: "PR", name: "Puerto Rico" },
+];

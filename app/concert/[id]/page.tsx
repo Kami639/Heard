@@ -153,7 +153,13 @@ export default function Concert({ params }: { params: Promise<{ id: string }> })
         </div>
       )}
       <section className="flex-1 overflow-y-auto pb-4">
-        <div className="flex flex-col items-center gap-3 px-6 pt-4">
+        <button
+          onClick={() => router.push("/archive")}
+          className="pressable flex items-center gap-1 px-5 pt-3 text-sm text-accent"
+        >
+          ‹ Archive
+        </button>
+        <div className="flex flex-col items-center gap-3 px-6 pt-2">
           <div className="w-full max-w-64"><Art c1={c.c1} c2={c.c2} initials={c.initials} imageUrl={c.imageUrl} /></div>
           <div className="text-center">
             <div

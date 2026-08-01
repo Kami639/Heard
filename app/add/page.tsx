@@ -6,6 +6,7 @@ import { Search } from "lucide-react";
 import { AppShell } from "@/components/AppShell";
 import { Art } from "@/components/Art";
 import { MOCK_SEARCH, type ConcertRec } from "@/features/concerts/data";
+import { COUNTRY_LIST } from "@/lib/countries";
 import { addConcert, getConcerts } from "@/lib/store";
 
 const PALETTE = [
@@ -29,7 +30,9 @@ export default function Add() {
   const router = useRouter();
   const [q, setQ] = useState("");
   const [year, setYear] = useState("All");
+  const [country, setCountry] = useState("All");
   const [tourFilter, setTourFilter] = useState("All");
+  const [tourOptions, setTourOptions] = useState<string[]>([]);
   const [page, setPage] = useState(1);
   const [results, setResults] = useState<Result[]>([]);
   const [suggestion, setSuggestion] = useState<string | null>(null);
@@ -61,9 +64,10 @@ export default function Add() {
     if (q.length < 2) { setResults([]); setSuggestion(null); setStatus("idle"); return; }
     setStatus("loading");
     setTourFilter("All");
+    setTourOptions([]);
     timer.current = setTimeout(() => search(q, year, 1, false), 1200);
     return () => { if (timer.current) clearTimeout(timer.current); };
-  }, [q, year]);
+  }, [q, year, country]);
 
   async function fetchArtistFix(query: string) {
     try {
@@ -74,10 +78,18 @@ export default function Add() {
     } catch { setSuggestion(null); }
   }
 
-  async function search(query: string, yr: string, pg: number, append: boolean) {
+  async function search(query: string, yr: string, pg: number, append: boolean, tour?: string) {
     try {
-      const params = new URLSearchParams({ p: String(pg), q: query });
+      const params = new URLSearchParams({ p: String(pg) });
+      if (tour) {
+        params.set("tourName", tour);
+        const hint = results.find((r) => r.tour === tour)?.artist;
+        if (hint) params.set("artist", hint);
+      } else {
+        params.set("q", query);
+      }
       if (yr !== "All") params.set("year", yr);
+      if (country !== "All") params.set("country", country);
       const res = await fetch(`/api/setlist/search?${params}`);
       if (res.status === 429) {
         setStatus("cooldown");
@@ -139,6 +151,11 @@ export default function Add() {
         return +new Date(b.dateDisplay) - +new Date(a.dateDisplay); // then newest
       });
       setTypeahead([]);
+      setTourOptions((prev) => {
+        const merged = new Set(prev);
+        for (const m of mapped) if (m.tour && m.tour !== "Live") merged.add(m.tour);
+        return [...merged];
+      });
       setResults(append ? (prev) => [...prev, ...mapped] as any : mapped);
       setPage(pg);
       setStatus("live");
@@ -180,6 +197,15 @@ export default function Add() {
             className="w-full bg-transparent text-[16px] text-ink outline-none placeholder:text-sub"
             autoFocus
           />
+          <select
+            value={country}
+            onChange={(e) => setCountry(e.target.value)}
+            className="shrink-0 rounded-lg bg-card2 px-2 py-1 text-sm text-accent outline-none"
+            aria-label="Filter by country"
+          >
+            <option value="All">🌍</option>
+            {COUNTRY_LIST.map((c) => <option key={c.code} value={c.code}>{c.name}</option>)}
+          </select>
           <select
             value={year}
             onChange={(e) => setYear(e.target.value)}
@@ -235,24 +261,31 @@ export default function Add() {
           <p className="text-center text-[10px] text-sub">DEMO MODE — add API keys to .env.local for live sync</p>
         )}
 
-        {(() => {
-          const tours = [...new Set(results.map((r) => r.tour))];
-          return tours.length > 1 ? (
-            <select
-              value={tourFilter}
-              onChange={(e) => setTourFilter(e.target.value)}
-              className="self-start rounded-lg bg-card px-3 py-2 text-sm text-accent outline-none"
-              aria-label="Filter by tour"
-            >
-              <option value="All">All tours ({results.length})</option>
-              {tours.map((t) => (
-                <option key={t} value={t}>{t} ({results.filter((r) => r.tour === t).length})</option>
-              ))}
-            </select>
-          ) : null;
-        })()}
+        {tourOptions.length > 1 && (
+          <select
+            value={tourFilter}
+            onChange={(e) => {
+              const v = e.target.value;
+              setTourFilter(v);
+              if (v !== "All") {
+                setStatus("loading");
+                search(q, year, 1, false, v); // fetch the ENTIRE tour, not just loaded shows
+              } else {
+                setStatus("loading");
+                search(q, year, 1, false);
+              }
+            }}
+            className="self-start rounded-lg bg-card px-3 py-2 text-sm text-accent outline-none"
+            aria-label="Filter by tour"
+          >
+            <option value="All">All tours</option>
+            {tourOptions.map((t) => (
+              <option key={t} value={t}>{t}</option>
+            ))}
+          </select>
+        )}
         <div className="flex flex-col gap-2">
-          {results.filter((r) => tourFilter === "All" || r.tour === tourFilter).map((r, ri) => (
+          {results.map((r, ri) => (
             <button
               key={r.id}
               onClick={() => pick(r)}
@@ -273,7 +306,7 @@ export default function Add() {
           ))}
         </div>
 
-        {status === "live" && results.length >= 20 * page && (
+        {status === "live" && results.length >= 15 && tourFilter === "All" && (
           <button
             onClick={() => { setStatus("loading"); search(q, year, page + 1, true); }}
             className="pressable mx-auto rounded-full bg-card px-5 py-2.5 text-sm text-accent"

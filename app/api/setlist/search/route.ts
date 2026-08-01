@@ -3,6 +3,7 @@ import { searchSetlists, type SetlistResult } from "@/lib/setlistfm";
 import { COUNTRY_CODES } from "@/lib/countries";
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+const norm = (x: string) => x.toLowerCase().replace(/[^a-z0-9]/g, "");
 
 export async function GET(req: NextRequest) {
   const sp = req.nextUrl.searchParams;
@@ -10,6 +11,7 @@ export async function GET(req: NextRequest) {
   const artist = sp.get("artist");
   const tourQ = sp.get("tourName");
   const year = sp.get("year") ?? undefined;
+  const countryFilter = sp.get("country") ?? undefined; // explicit dropdown
   const page = Number(sp.get("p") ?? "1");
 
   if (!q && !artist && !tourQ) {
@@ -20,32 +22,51 @@ export async function GET(req: NextRequest) {
     let results: SetlistResult[] = [];
 
     if (q) {
-      // Smart search: artists, tours, and venues/festivals in one shot.
-      // Sequential with small gaps to respect setlist.fm's ~2 req/sec limit.
       const merged = new Map<string, SetlistResult>();
-      const country = COUNTRY_CODES[q.toLowerCase().trim()];
-      const runs: Array<Partial<Parameters<typeof searchSetlists>[0]>> =
-        page > 1
-          ? [{ artistName: q }] // only paginate the artist search
-          : country
-            ? [{ artistName: q }, { tourName: q }, { countryCode: country }]
-            : [{ artistName: q }, { tourName: q }, { venueName: q }, { cityName: q }];
-
-      for (let i = 0; i < runs.length; i++) {
-        if (i > 0) await sleep(350);
+      const base = countryFilter ? { countryCode: countryFilter } : {};
+      const run = async (extra: Parameters<typeof searchSetlists>[0], p = 1) => {
         try {
-          const batch = await searchSetlists({ ...runs[i], year, p: page });
+          const batch = await searchSetlists({ ...base, ...extra, year, p });
           for (const r of batch) merged.set(r.setlistFmId, r);
-        } catch (e: any) {
-          if (e?.rateLimited && merged.size === 0 && i === runs.length - 1) throw e;
-          // otherwise keep whatever we already have
+        } catch {}
+      };
+
+      if (page > 1) {
+        await run({ artistName: q }, page);
+      } else {
+        // Artist first — it's the common case, so we go deep on it and only
+        // fan out to tour/venue/city when the artist search comes up thin.
+        await run({ artistName: q });
+        const artistHits = merged.size;
+        if (artistHits >= 20) { await sleep(250); await run({ artistName: q }, 2); }
+        await sleep(250); await run({ tourName: q });
+        const asCountry = COUNTRY_CODES[q.toLowerCase().trim()];
+        if (asCountry && !countryFilter) {
+          await sleep(250); await run({ countryCode: asCountry });
+        } else if (artistHits < 10) {
+          await sleep(250); await run({ venueName: q });
+          await sleep(250); await run({ cityName: q });
         }
       }
-      results = [...merged.values()].slice(0, 40);
+
+      // Relevance gate: every kept result must actually contain the query
+      // somewhere (artist/tour/venue/city). Kills "Devil Wears Prada" when
+      // you searched "Pradabagshawty".
+      const nq = norm(q);
+      const relevant = [...merged.values()].filter((r) => {
+        for (const f of [r.artist, r.tour ?? "", r.venue, r.city]) {
+          const nf = norm(f);
+          if (!nf) continue;
+          if (nf.includes(nq) || (nq.includes(nf) && nf.length > 3)) return true;
+        }
+        return false;
+      });
+      results = (relevant.length ? relevant : [...merged.values()]).slice(0, 60);
     } else {
       results = await searchSetlists({
         artistName: artist ?? undefined,
         tourName: tourQ ?? undefined,
+        countryCode: countryFilter,
         year,
         p: page,
       });
