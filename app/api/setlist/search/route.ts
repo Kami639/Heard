@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { searchSetlists, type SetlistResult } from "@/lib/setlistfm";
+import { COUNTRY_CODES } from "@/lib/countries";
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
@@ -22,10 +23,13 @@ export async function GET(req: NextRequest) {
       // Smart search: artists, tours, and venues/festivals in one shot.
       // Sequential with small gaps to respect setlist.fm's ~2 req/sec limit.
       const merged = new Map<string, SetlistResult>();
+      const country = COUNTRY_CODES[q.toLowerCase().trim()];
       const runs: Array<Partial<Parameters<typeof searchSetlists>[0]>> =
         page > 1
           ? [{ artistName: q }] // only paginate the artist search
-          : [{ artistName: q }, { tourName: q }, { venueName: q }];
+          : country
+            ? [{ artistName: q }, { tourName: q }, { countryCode: country }]
+            : [{ artistName: q }, { tourName: q }, { venueName: q }, { cityName: q }];
 
       for (let i = 0; i < runs.length; i++) {
         if (i > 0) await sleep(350);
@@ -37,7 +41,7 @@ export async function GET(req: NextRequest) {
           // otherwise keep whatever we already have
         }
       }
-      results = [...merged.values()].slice(0, 30);
+      results = [...merged.values()].slice(0, 40);
     } else {
       results = await searchSetlists({
         artistName: artist ?? undefined,

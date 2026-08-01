@@ -24,6 +24,7 @@ export async function searchSetlists(params: {
   artistName?: string;
   tourName?: string;
   venueName?: string;
+  countryCode?: string;
   date?: string; // dd-MM-yyyy per setlist.fm
   cityName?: string;
   year?: string;
@@ -36,6 +37,7 @@ export async function searchSetlists(params: {
   if (params.artistName) qs.set("artistName", params.artistName);
   if (params.tourName) qs.set("tourName", params.tourName);
   if (params.venueName) qs.set("venueName", params.venueName);
+  if (params.countryCode) qs.set("countryCode", params.countryCode);
   if (params.date) qs.set("date", params.date);
   if (params.cityName) qs.set("cityName", params.cityName);
   if (params.year) qs.set("year", params.year);

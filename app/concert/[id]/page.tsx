@@ -25,6 +25,41 @@ export default function Concert({ params }: { params: Promise<{ id: string }> })
   const [concerts, setConcerts] = useState<ConcertRec[]>([]);
   const [toast, setToast] = useState(false);
   const [mediaUrls, setMediaUrls] = useState<Record<string, string>>({});
+  const [footage, setFootage] = useState<{ videoId: string; title: string; thumbnail: string; channel: string }[]>([]);
+  const [playing, setPlaying] = useState<string | null>(null);
+  const [playingSong, setPlayingSong] = useState<string | null>(null);
+  const [loadingSong, setLoadingSong] = useState<string | null>(null);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const previewCache = useRef<Record<string, string | null>>({});
+
+  const stopSong = () => {
+    audioRef.current?.pause();
+    audioRef.current = null;
+    setPlayingSong(null);
+  };
+
+  async function toggleSong(song: string, artist: string) {
+    if (playingSong === song) { stopSong(); return; }
+    stopSong();
+    setLoadingSong(song);
+    let url = previewCache.current[song];
+    if (url === undefined) {
+      try {
+        const r = await fetch(`/api/preview?song=${encodeURIComponent(song)}&artist=${encodeURIComponent(artist)}`);
+        url = (await r.json()).previewUrl ?? null;
+      } catch { url = null; }
+      previewCache.current[song] = url;
+    }
+    setLoadingSong(null);
+    if (!url) { setPlayingSong(null); return; }
+    const audio = new Audio(url);
+    audio.onended = () => setPlayingSong(null);
+    audioRef.current = audio;
+    setPlayingSong(song);
+    audio.play().catch(() => setPlayingSong(null));
+  }
+
+  useEffect(() => () => { audioRef.current?.pause(); }, []);
 
   useEffect(() => {
     if (new URLSearchParams(window.location.search).get("added")) {
@@ -37,6 +72,19 @@ export default function Concert({ params }: { params: Promise<{ id: string }> })
   useEffect(() => setConcerts(getConcerts()), []);
 
   const fileRef = useRef<HTMLInputElement>(null);
+
+  const cRef = concerts.find((x) => x.id === id);
+  useEffect(() => {
+    if (!cRef) return;
+    (async () => {
+      try {
+        const r = await fetch(
+          `/api/footage?artist=${encodeURIComponent(cRef.artist)}&venue=${encodeURIComponent(cRef.venue)}&date=${encodeURIComponent(cRef.dateDisplay)}`
+        );
+        setFootage((await r.json()).videos ?? []);
+      } catch { setFootage([]); }
+    })();
+  }, [cRef?.artist, id]);
 
   const cForMedia = concerts.find((x) => x.id === id);
   useEffect(() => {
@@ -159,13 +207,27 @@ export default function Concert({ params }: { params: Promise<{ id: string }> })
           )}
           <ol className="flex flex-col gap-1">
             {c.setlist.map((s, i) => (
-              <li key={s} className="flex items-baseline gap-3 text-sm">
-                <span className="w-4 text-right font-mono text-[11px] text-sub">{i + 1}.</span>
-                {s}
+              <li key={s}>
+                <button
+                  onClick={() => toggleSong(s, c.artist)}
+                  className="pressable flex w-full items-center gap-3 rounded-lg px-1 py-1 text-left text-sm"
+                >
+                  <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-card text-[11px] text-accent">
+                    {loadingSong === s ? "…" : playingSong === s ? "❚❚" : "▶"}
+                  </span>
+                  <span className={`min-w-0 flex-1 truncate ${playingSong === s ? "font-semibold text-accent" : ""}`}>{s}</span>
+                  {playingSong === s && (
+                    <span className="flex items-end gap-0.5" aria-hidden>
+                      {[0, 1, 2].map((k) => (
+                        <span key={k} className="w-1 rounded-sm bg-accent" style={{ animation: `eq 0.8s ease-in-out ${k * 0.15}s infinite alternate`, height: 10 }} />
+                      ))}
+                    </span>
+                  )}
+                </button>
               </li>
             ))}
           </ol>
-          <div className="mt-2 font-mono text-[10px] text-sub">Setlist via setlist.fm</div>
+          <div className="mt-2 font-mono text-[10px] text-sub">Setlist via setlist.fm · Previews via iTunes</div>
         </Section>
 
         <Section label={`MEMORIES (${(c.media?.length ?? 0) + (c.photosData?.length ?? 0)})`}>
@@ -227,13 +289,40 @@ export default function Concert({ params }: { params: Promise<{ id: string }> })
         </Section>
 
         <Section label="FOOTAGE">
-          <p className="mb-2 font-mono text-[11px] text-sub">
-            Watch everyone&apos;s videos from this night:
+          {footage.length > 0 && (
+            <div className="-mx-2 mb-3 flex snap-x gap-3 overflow-x-auto px-2 pb-2">
+              {footage.map((v) => (
+                <div key={v.videoId} className="w-[240px] shrink-0 snap-start overflow-hidden rounded-xl bg-card">
+                  {playing === v.videoId ? (
+                    <iframe
+                      src={`https://www.youtube-nocookie.com/embed/${v.videoId}?autoplay=1&playsinline=1`}
+                      className="aspect-video w-full"
+                      allow="autoplay; encrypted-media; picture-in-picture"
+                      allowFullScreen
+                      title={v.title}
+                    />
+                  ) : (
+                    <button onClick={() => setPlaying(v.videoId)} className="pressable relative block w-full">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img src={v.thumbnail} alt="" className="aspect-video w-full object-cover" />
+                      <span className="absolute inset-0 flex items-center justify-center">
+                        <span className="flex h-11 w-11 items-center justify-center rounded-full bg-black/70 pl-1 text-lg text-accent">▶</span>
+                      </span>
+                    </button>
+                  )}
+                  <p className="truncate px-2.5 py-2 text-xs">{v.title}</p>
+                </div>
+              ))}
+            </div>
+          )}
+          <p className="mb-2 text-xs text-sub">
+            {footage.length > 0 ? "More from everyone who was there:" : "Watch everyone's videos from this night:"}
           </p>
           <div className="flex flex-wrap gap-2">
             {[
               ["TikTok", `https://www.tiktok.com/search?q=${encodeURIComponent(`${c.artist} ${c.venue} ${c.dateDisplay}`)}`],
               ["Instagram", `https://www.instagram.com/explore/search/keyword/?q=${encodeURIComponent(`${c.artist} ${c.city} ${c.year}`)}`],
+              ["X", `https://x.com/search?q=${encodeURIComponent(`${c.artist} ${c.venue}`)}&f=video`],
               ["YouTube", `https://www.youtube.com/results?search_query=${encodeURIComponent(`${c.artist} ${c.venue} ${c.dateDisplay}`)}`],
             ].map(([label, href]) => (
               <a
@@ -241,7 +330,7 @@ export default function Concert({ params }: { params: Promise<{ id: string }> })
                 href={href}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="pressable rounded-full border border-hairline bg-card px-4 py-2 font-mono text-xs"
+                className="pressable rounded-full bg-card px-4 py-2 text-xs"
               >
                 {label} ▸
               </a>

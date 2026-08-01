@@ -176,7 +176,7 @@ export default function Add() {
                 search(q, year, 1, false);
               }
             }}
-            placeholder="Artist, tour, or festival"
+            placeholder="Artist, tour, festival, or city"
             className="w-full bg-transparent text-[16px] text-ink outline-none placeholder:text-sub"
             autoFocus
           />
