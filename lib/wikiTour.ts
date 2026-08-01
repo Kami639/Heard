@@ -433,7 +433,7 @@ export async function fetchTourInfo(name: string, artist?: string | null): Promi
     try {
       const setlistHtml = await fetchSetlistHtml(page.title);
       if (setlistHtml) {
-        let sets = parseSetlistHtml(setlistHtml, performers, info.artist ?? undefined);
+        let sets = parseSetlistHtml(setlistHtml, performers, info.artist ?? undefined, info.title);
 
         if (looksWrong(sets, performers)) {
           trace("setlist-suspect", `${page.title}: ${sets.length} set(s) for ${performers.length} performers`);

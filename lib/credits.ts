@@ -70,7 +70,16 @@ export async function fixConcertCredits(
     ...facts.artists,
   ])].filter((a) => a && a.length > 1);
 
-  const songArtists: Record<string, string> = { ...(concert.songArtists ?? {}) };
+  // scrub any credit that is really the event's name
+  const eventish = (name: string) =>
+    !name ||
+    norm(name) === norm(concert.tour ?? "") ||
+    (/\b(festival|fest|tour|stage)\b/i.test(name) && !acts.some((a) => norm(a) === norm(name)));
+
+  const songArtists: Record<string, string> = {};
+  for (const [song, who] of Object.entries(concert.songArtists ?? {})) {
+    if (!eventish(who)) songArtists[song] = who;
+  }
   let changed = 0;
 
   // 1) straight from the tour's own set lists — no guessing, no API per song

@@ -81,12 +81,21 @@ export async function fetchSetlistHtml(title: string): Promise<string | null> {
 
 /** Label-anchored walk: for each performer label, take the lists that follow
  *  it up to the next label — descending into column/collapsible wrappers. */
-export function parseSetlistHtml(html: string, knownArtists: string[] = [], headliner?: string): ArtistSet[] {
+export function parseSetlistHtml(html: string, knownArtists: string[] = [], headliner?: string, tourTitle?: string): ArtistSet[] {
   const $ = cheerio.load(html);
   const root: any = $(".mw-parser-output").length ? $(".mw-parser-output").first() : $.root();
   root.find("sup.reference, style, .mw-editsection").remove();
 
   const known = knownArtists.map(nk).filter(Boolean);
+  const tourKey = tourTitle ? nk(tourTitle) : "";
+  // "Glastonbury Festival" is an event, not the person who sang the song
+  const isEventName = (name: string) => {
+    const n = nk(name);
+    if (!n) return true;
+    if (tourKey && (n === tourKey || tourKey.includes(n) || n.includes(tourKey))) return true;
+    if (/\b(festival|fest|tour|stage|weekend|day \d|night \d)\b/i.test(name) && !known.includes(n)) return true;
+    return false;
+  };
   const looksKnown = (name: string) => {
     const n = nk(name);
     if (!n) return false;
@@ -119,6 +128,7 @@ export function parseSetlistHtml(html: string, knownArtists: string[] = [], head
     const raw = squash($(el).text());
     if (!raw || raw.length > 60) return false;
     if (DIVIDER_RE.test(cleanLabel(raw))) return false;
+    if (isEventName(cleanLabel(raw))) return false;
     if (INTRO_RE.test(raw) && !looksKnown(cleanLabel(raw))) return false;
     if (raw.split(/\s+/).length > 7) return false;
     return isLabelBlock(blockOf(el));

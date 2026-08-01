@@ -22,6 +22,9 @@ export async function GET(req: NextRequest) {
   if (hit && Date.now() < hit.exp) return NextResponse.json(hit.v);
 
   const artists = new Set<string>();
+  const EVENTISH = /\b(festival|fest|tour|stage|weekend)\b/i;
+  const isEvent = (name: string) =>
+    norm(name) === norm(tour) || (EVENTISH.test(name) && norm(name).includes(norm(tour).slice(0, 8)));
   const songArtists: Record<string, string> = {};
 
   // setlist.fm — authoritative, because each setlist IS one artist's set
@@ -29,7 +32,7 @@ export async function GET(req: NextRequest) {
     for (let p = 1; p <= 2; p++) {
       const rows = await searchSetlists({ tourName: tour, p });
       for (const r of rows) {
-        if (!r.artist) continue;
+        if (!r.artist || isEvent(r.artist)) continue;
         artists.add(r.artist);
         for (const s of r.setlist) {
           const k = norm(s.name);
@@ -54,7 +57,7 @@ export async function GET(req: NextRequest) {
     }
     for (const a of info?.supportActs ?? []) artists.add(a);
     for (const set of info?.sets ?? []) {
-      if (!set.artist) continue;
+      if (!set.artist || isEvent(set.artist)) continue;
       artists.add(set.artist);
       for (const song of set.songs) {
         const k = norm(song);

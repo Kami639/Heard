@@ -218,6 +218,32 @@ export default function Concert({ params }: { params: Promise<{ id: string }> })
           setConcerts(getConcerts());
         }
 
+        // Any performer credited on a song should have a face, including
+        // ones added by the credit fixer.
+        const credited = [...new Set(Object.values(cRef.songArtists ?? {}).flatMap((v) => splitArtists(v)))];
+        const haveNames = new Set((cRef.artists ?? []).map((a) => a.name.toLowerCase()));
+        const missingPeople = credited.filter((n) => !haveNames.has(n.toLowerCase()));
+        const needPhotos = (cRef.artists ?? []).filter((a) => !a.imageUrl).map((a) => a.name);
+
+        if (missingPeople.length || needPhotos.length) {
+          const additions = await Promise.all([...missingPeople, ...needPhotos].slice(0, 5).map(async (name) => {
+            try {
+              const r = await fetch(`/api/artist?name=${encodeURIComponent(name)}`);
+              return { name, imageUrl: (await r.json()).artist?.imageUrl ?? null };
+            } catch { return { name, imageUrl: null }; }
+          }));
+          const merged = [...(cRef.artists ?? [])];
+          for (const a of additions) {
+            const i = merged.findIndex((x) => x.name.toLowerCase() === a.name.toLowerCase());
+            if (i >= 0) { if (a.imageUrl) merged[i] = a; }
+            else merged.push(a);
+          }
+          if (merged.some((a, i) => a.imageUrl !== (cRef.artists ?? [])[i]?.imageUrl) || merged.length !== (cRef.artists?.length ?? 0)) {
+            updateConcert(cRef.id, { artists: merged });
+            setConcerts(getConcerts());
+          }
+        }
+
         // Duo/multi-artist covers: re-fetch any missing member photos
         if (cRef.artists?.length) {
           if (cRef.artists.every((a) => a.imageUrl)) return;
@@ -729,36 +755,34 @@ export default function Concert({ params }: { params: Promise<{ id: string }> })
                     </button>
                   )}
                   {(() => {
-                    const performer = c.songArtists?.[s];
-                    if (!performer || (c.artists?.length ?? 0) < 2) return null;
-                    // whoever was on this song: the performer plus any guest
-                    const onSong = [performer, ...(c.guests ?? []).filter((g) =>
-                      (c.songGuests?.[s] ?? []).includes(g))];
-                    const uniq = [...new Set(onSong)];
-                    const shown = uniq.slice(0, 2);
-                    const extra = uniq.length - shown.length;
+                    // who played this song — a joint credit shows both faces
+                    const credit = c.songArtists?.[s] ?? splitArtists(c.artist)[0] ?? c.artist;
+                    const names = splitArtists(credit).slice(0, 3);
+                    if (!names.length) return null;
+                    const shown = names.slice(0, 2);
+                    const extra = names.length - shown.length;
                     return (
                       <span className="ml-1 flex shrink-0 items-center">
                         {shown.map((name, idx) => {
-                          const who = c.artists!.find((a) => a.name.toLowerCase() === name.toLowerCase());
+                          const who = c.artists?.find((a) => a.name.toLowerCase() === name.toLowerCase());
                           return (
                             <span
-                              key={name}
+                              key={`${name}-${idx}`}
                               title={name}
-                              style={{ marginLeft: idx === 0 ? 0 : -8, zIndex: shown.length - idx }}
+                              style={{ marginLeft: idx === 0 ? 0 : -9, zIndex: shown.length - idx }}
                               className="flex h-6 w-6 items-center justify-center overflow-hidden rounded-full border border-bg bg-card2 text-[9px] font-bold text-sub"
                             >
                               {who?.imageUrl ? (
                                 // eslint-disable-next-line @next/next/no-img-element
                                 <img src={who.imageUrl} alt={name} className="h-full w-full object-cover" />
                               ) : (
-                                name.slice(0, 2).toUpperCase()
+                                name.replace(/[^A-Za-z ]/g, "").slice(0, 2).toUpperCase()
                               )}
                             </span>
                           );
                         })}
                         {extra > 0 && (
-                          <span className="ml-[-8px] flex h-6 w-6 items-center justify-center rounded-full border border-bg bg-card2 text-[9px] font-bold text-accent">
+                          <span className="ml-[-9px] flex h-6 w-6 items-center justify-center rounded-full border border-bg bg-card2 text-[9px] font-bold text-accent">
                             +{extra}
                           </span>
                         )}

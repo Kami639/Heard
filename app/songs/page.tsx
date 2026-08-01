@@ -52,6 +52,16 @@ export default function Songs() {
   const concerts = useConcerts();
 
   // songs are derived state — recomputed whenever the archive changes
+  // one photo lookup per artist, reused across every row
+  const artistPhotos = useMemo(() => {
+    const map: Record<string, string> = {};
+    for (const c of concerts) {
+      for (const a of c.artists ?? []) if (a.imageUrl) map[a.name.toLowerCase()] = a.imageUrl;
+      if (c.imageUrl) map[(splitArtists(c.artist)[0] ?? "").toLowerCase()] ??= c.imageUrl;
+    }
+    return map;
+  }, [concerts]);
+
   const { songs, total } = useMemo(() => {
     const map = new Map<string, SongCount>();
     let t = 0;
@@ -59,7 +69,9 @@ export default function Songs() {
       if (c.cancelled) continue;
       for (const s of c.setlist) {
         t++;
-        const performer = c.songArtists?.[s] ?? splitArtists(c.artist)[0] ?? c.artist;
+        const raw = c.songArtists?.[s];
+        const eventish = raw && (raw === c.tour || /\b(festival|fest|tour|stage)\b/i.test(raw));
+        const performer = (!raw || eventish ? splitArtists(c.artist)[0] : raw) ?? c.artist;
         const key = `${s.toLowerCase()}::${performer.toLowerCase()}`;
         const cur = map.get(key);
         if (cur) cur.count++;
