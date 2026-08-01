@@ -6,7 +6,7 @@ import { ChevronRight, Music2, Disc3 } from "lucide-react";
 import { AppShell } from "@/components/AppShell";
 import { Art, Stars } from "@/components/Art";
 import { LcdStat } from "@/components/lcd/LcdStat";
-import { getConcerts } from "@/lib/store";
+import { getConcerts, daysUntil } from "@/lib/store";
 import type { ConcertRec } from "@/features/concerts/data";
 
 export default function Home() {
@@ -32,6 +32,11 @@ export default function Home() {
                 <div className="font-display text-xl font-bold">{latest.artist}</div>
                 <div className="text-sm text-sub">{latest.tour}</div>
                 <div className="mt-0.5 text-xs text-sub">{latest.city} · {latest.dateDisplay}</div>
+                {daysUntil(latest.dateDisplay) !== null && (
+                  <span className="mt-1 inline-block rounded-full bg-accent/15 px-2.5 py-0.5 text-xs font-semibold text-accent">
+                    in {daysUntil(latest.dateDisplay)} days
+                  </span>
+                )}
               </div>
               <Stars n={latest.rating} />
             </div>

@@ -13,6 +13,7 @@ export default function Wrapped() {
   const [concerts, setConcerts] = useState<ConcertRec[]>([]);
   const [ready, setReady] = useState(false);
   const [year, setYear] = useState<number | null>(null);
+  const [story, setStory] = useState(-1); // -1 = closed, 0..n = slide index
 
   useEffect(() => {
     setConcerts(getConcerts());
@@ -35,8 +36,68 @@ export default function Wrapped() {
     .slice(0, 3)
     .map(([name, v]) => ({ name, count: v.count, imageUrl: v.imageUrl }));
 
+  const slides: { label: string; value: string; sub?: string }[] = [
+    { label: "", value: `${YEAR}`, sub: "your year in live music" },
+    { label: "SHOWS", value: `${yr.length}`, sub: yr.length === 1 ? "one unforgettable night" : "nights you'll never forget" },
+    { label: "CITIES", value: `${new Set(yr.map((c) => c.city)).size}`, sub: "everywhere the music took you" },
+    { label: "HOURS OF LIVE MUSIC", value: `≈${hours}`, sub: `${songsCount} songs, live` },
+    ...(topArtists.length ? [{ label: "TOP ARTIST", value: topArtists[0].name, sub: `${topArtists[0].count} ${topArtists[0].count === 1 ? "show" : "shows"} this year` }] : []),
+  ];
+
+  useEffect(() => {
+    if (story < 0) return;
+    if (story >= slides.length) { setStory(-1); return; }
+    const t = setTimeout(() => setStory((s) => s + 1), 2800);
+    return () => clearTimeout(t);
+  }, [story, slides.length]);
+
   return (
     <AppShell title="wrapped" count={concerts.length}>
+      {story >= 0 && story < slides.length && (
+        <div
+          className="fixed inset-0 z-[100] flex flex-col bg-black"
+          onClick={(e) => {
+            const x = (e as any).clientX ?? 0;
+            if (x < window.innerWidth / 3) setStory((s) => Math.max(0, s - 1));
+            else setStory((s) => s + 1);
+          }}
+        >
+          <div className="flex gap-1.5 p-3 pt-5">
+            {slides.map((_, i) => (
+              <div key={i} className="h-1 flex-1 overflow-hidden rounded-full bg-card2">
+                <div
+                  className="h-full bg-accent"
+                  style={{
+                    width: i < story ? "100%" : i === story ? undefined : "0%",
+                    animation: i === story ? "storyBar 2.8s linear forwards" : undefined,
+                  }}
+                />
+              </div>
+            ))}
+          </div>
+          <div key={story} className="flex flex-1 flex-col items-center justify-center gap-3 px-8 text-center">
+            {slides[story].label && (
+              <span className="fade-up text-sm font-semibold tracking-[0.2em] text-sub">{slides[story].label}</span>
+            )}
+            <span
+              className="fade-up break-words font-display font-extrabold leading-none text-accent"
+              style={{ fontSize: slides[story].value.length > 6 ? "13vw" : "26vw", maxWidth: "100%", animationDelay: "120ms" }}
+            >
+              {slides[story].value}
+            </span>
+            {slides[story].sub && (
+              <span className="fade-up text-lg text-ink" style={{ animationDelay: "300ms" }}>{slides[story].sub}</span>
+            )}
+          </div>
+          <button
+            onClick={(e) => { e.stopPropagation(); setStory(-1); }}
+            className="absolute right-4 top-8 text-2xl text-sub"
+            aria-label="Close"
+          >
+            ✕
+          </button>
+        </div>
+      )}
       <section className="flex flex-1 flex-col items-center gap-4 overflow-y-auto px-6 pb-4 pt-6">
         <div className="flex items-center gap-2">
           <select
@@ -48,6 +109,14 @@ export default function Wrapped() {
             {(yearsAvail.length ? yearsAvail : [YEAR]).map((y) => <option key={y} value={y}>{y}</option>)}
           </select>
           <span className="font-display text-lg font-bold">Wrapped</span>
+          {yr.length > 0 && (
+            <button
+              onClick={() => setStory(0)}
+              className="pressable ml-2 rounded-full bg-accent px-4 py-1.5 text-sm font-semibold text-black"
+            >
+              ▶ Play
+            </button>
+          )}
         </div>
         <div
           className="relative h-36 w-36 rounded-full border border-hairline shadow-[0_4px_12px_rgb(30_30_30/0.25)]"

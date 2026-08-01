@@ -4,7 +4,8 @@ import { use, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { AppShell } from "@/components/AppShell";
 import { Art, Stars } from "@/components/Art";
-import { getConcerts, updateConcert, deleteConcert } from "@/lib/store";
+import { getConcerts, updateConcert, deleteConcert, daysUntil } from "@/lib/store";
+import { saveMedia, getMedia, deleteMedia } from "@/lib/media";
 import { downloadShareCard } from "@/lib/shareCard";
 import { useRef } from "react";
 import type { ConcertRec } from "@/features/concerts/data";
@@ -23,6 +24,7 @@ export default function Concert({ params }: { params: Promise<{ id: string }> })
   const router = useRouter();
   const [concerts, setConcerts] = useState<ConcertRec[]>([]);
   const [toast, setToast] = useState(false);
+  const [mediaUrls, setMediaUrls] = useState<Record<string, string>>({});
 
   useEffect(() => {
     if (new URLSearchParams(window.location.search).get("added")) {
@@ -36,20 +38,42 @@ export default function Concert({ params }: { params: Promise<{ id: string }> })
 
   const fileRef = useRef<HTMLInputElement>(null);
 
+  const cForMedia = concerts.find((x) => x.id === id);
+  useEffect(() => {
+    let revoked: string[] = [];
+    (async () => {
+      const refs = cForMedia?.media ?? [];
+      const urls: Record<string, string> = {};
+      for (const m of refs) {
+        const blob = await getMedia(m.id);
+        if (blob) { urls[m.id] = URL.createObjectURL(blob); revoked.push(urls[m.id]); }
+      }
+      setMediaUrls(urls);
+    })();
+    return () => revoked.forEach((u) => URL.revokeObjectURL(u));
+  }, [cForMedia?.media?.length, id]);
+
   const idx = concerts.findIndex((c) => c.id === id);
   const c = concerts[idx];
 
   async function onPickPhotos(e: React.ChangeEvent<HTMLInputElement>) {
     if (!c) return;
     const files = [...(e.target.files ?? [])].slice(0, 6);
-    const imgs: string[] = [];
-    for (const f of files) imgs.push(await compress(f));
-    const photosData = [...(c.photosData ?? []), ...imgs].slice(0, 12);
-    try {
-      updateConcert(c.id, { photosData, photos: photosData.length });
+    const added: { id: string; type: "image" | "video" }[] = [];
+    for (const f of files) {
+      try {
+        if (f.type.startsWith("video/")) {
+          if (f.size > 60 * 1024 * 1024) { alert(`${f.name} is over 60MB — trim it shorter.`); continue; }
+          added.push({ id: await saveMedia(f), type: "video" });
+        } else if (f.type.startsWith("image/")) {
+          added.push({ id: await saveMedia(await compressBlob(f)), type: "image" });
+        }
+      } catch { alert("Couldn't save that one — storage may be full."); }
+    }
+    if (added.length) {
+      const media = [...(c.media ?? []), ...added];
+      updateConcert(c.id, { media, photos: media.length + (c.photosData?.length ?? 0) });
       setConcerts(getConcerts());
-    } catch {
-      alert("Storage full — remove some photos or use smaller ones.");
     }
     if (fileRef.current) fileRef.current.value = "";
   }
@@ -63,6 +87,7 @@ export default function Concert({ params }: { params: Promise<{ id: string }> })
   const del = () => {
     if (!c) return;
     if (confirm(`Delete ${c.artist} from your archive? This can't be undone.`)) {
+      deleteMedia((c.media ?? []).map((m) => m.id));
       deleteConcert(c.id);
       router.push("/archive");
     }
@@ -92,6 +117,11 @@ export default function Concert({ params }: { params: Promise<{ id: string }> })
             <div className="max-w-full break-words px-2 text-sm text-sub">{c.tour}</div>
             <div className="mt-0.5 font-mono text-xs text-sub">{c.venue} · {c.city}</div>
             <div className="font-mono text-xs text-sub">{c.dateDisplay}</div>
+            {daysUntil(c.dateDisplay) !== null && (
+              <span className="mt-1 inline-block rounded-full bg-accent/15 px-3 py-1 text-xs font-semibold text-accent">
+                in {daysUntil(c.dateDisplay)} {daysUntil(c.dateDisplay) === 1 ? "day" : "days"}
+              </span>
+            )}
             <div className="mt-1 flex justify-center gap-1">
               {[1, 2, 3, 4, 5].map((n) => (
                 <button
@@ -138,11 +168,38 @@ export default function Concert({ params }: { params: Promise<{ id: string }> })
           <div className="mt-2 font-mono text-[10px] text-sub">Setlist via setlist.fm</div>
         </Section>
 
-        <Section label={`PHOTOS (${c.photosData?.length ?? 0})`}>
+        <Section label={`MEMORIES (${(c.media?.length ?? 0) + (c.photosData?.length ?? 0)})`}>
           <div className="flex flex-wrap justify-center gap-3 py-2">
+            {(c.media ?? []).map((m, i) =>
+              m.type === "video" ? (
+                mediaUrls[m.id] ? (
+                  <video
+                    key={m.id}
+                    src={mediaUrls[m.id]}
+                    controls
+                    playsInline
+                    preload="metadata"
+                    className="w-[220px] max-w-full rounded-xl bg-card"
+                  />
+                ) : null
+              ) : (
+                <div
+                  key={m.id}
+                  className="w-[104px] border border-hairline bg-white p-1.5 pb-5 shadow-[0_3px_8px_rgb(30_30_30/0.2)]"
+                  style={{ transform: `rotate(${[-4, 2, -2, 3, -1, 4][i % 6]}deg)` }}
+                >
+                  {mediaUrls[m.id] ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={mediaUrls[m.id]} alt="" className="aspect-square w-full object-cover" />
+                  ) : (
+                    <div className="aspect-square w-full bg-card" />
+                  )}
+                </div>
+              )
+            )}
             {(c.photosData ?? []).map((src, i) => (
               <div
-                key={i}
+                key={`legacy-${i}`}
                 className="w-[104px] border border-hairline bg-white p-1.5 pb-5 shadow-[0_3px_8px_rgb(30_30_30/0.2)]"
                 style={{ transform: `rotate(${[-4, 2, -2, 3, -1, 4][i % 6]}deg)` }}
               >
@@ -153,9 +210,9 @@ export default function Concert({ params }: { params: Promise<{ id: string }> })
           </div>
           <div className="flex justify-center">
             <button onClick={() => fileRef.current?.click()} className="pressable rounded-full border border-hairline bg-card px-4 py-2 font-mono text-xs">
-              + ADD PHOTOS
+              + ADD PHOTOS / VIDEOS
             </button>
-            <input ref={fileRef} type="file" accept="image/*" multiple hidden onChange={onPickPhotos} />
+            <input ref={fileRef} type="file" accept="image/*,video/*" multiple hidden onChange={onPickPhotos} />
           </div>
         </Section>
 
@@ -211,7 +268,25 @@ export default function Concert({ params }: { params: Promise<{ id: string }> })
 }
 
 
-/** Downscale + JPEG-compress so photos fit in localStorage (~5MB total). */
+function compressBlob(file: File): Promise<Blob> {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => {
+      const max = 1400;
+      const sc = Math.min(1, max / Math.max(img.width, img.height));
+      const cv = document.createElement("canvas");
+      cv.width = Math.round(img.width * sc);
+      cv.height = Math.round(img.height * sc);
+      cv.getContext("2d")!.drawImage(img, 0, 0, cv.width, cv.height);
+      cv.toBlob((b) => (b ? resolve(b) : reject(new Error("blob"))), "image/jpeg", 0.82);
+      URL.revokeObjectURL(img.src);
+    };
+    img.onerror = reject;
+    img.src = URL.createObjectURL(file);
+  });
+}
+
+/** Legacy: dataURL compressor (old photos still render from localStorage). */
 function compress(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
     const img = new Image();

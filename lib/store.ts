@@ -34,3 +34,10 @@ export function addConcert(c: ConcertRec) {
   const added: ConcertRec[] = JSON.parse(localStorage.getItem(KEY) ?? "[]");
   localStorage.setItem(KEY, JSON.stringify([c, ...added]));
 }
+
+export function daysUntil(dateDisplay: string): number | null {
+  const d = new Date(dateDisplay);
+  if (isNaN(+d)) return null;
+  const diff = Math.ceil((+d - Date.now()) / 86400000);
+  return diff > 0 ? diff : null;
+}

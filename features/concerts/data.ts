@@ -15,7 +15,8 @@ export interface ConcertRec {
   notes: string;
   setlist: string[];
   imageUrl?: string | null;
-  photosData?: string[]; // compressed dataURLs
+  photosData?: string[]; // legacy compressed dataURLs
+  media?: { id: string; type: "image" | "video" }[];
   lat?: number | null;
   lng?: number | null;
 }

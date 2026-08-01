@@ -44,3 +44,5 @@ input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; marg
   to { opacity: 1; transform: none; }
 }
 .fade-up { animation: fadeUp 0.4s cubic-bezier(0.22, 1, 0.36, 1) both; }
+
+@keyframes storyBar { from { width: 0%; } to { width: 100%; } }
