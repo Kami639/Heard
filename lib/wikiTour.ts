@@ -48,6 +48,7 @@ export interface TourGuest {
 }
 
 import { fetchRenderedHtml, parseWikiTables } from "./wikiTables";
+import { fetchSetlistHtml, parseSetlistHtml, looksWrong, extractSetlistWithClaude } from "./wikiSetlists";
 import { politeJson } from "./requestQueue";
 
 const cache = new Map<string, { v: TourInfo | null; exp: number }>();
@@ -417,10 +418,34 @@ export async function fetchTourInfo(name: string, artist?: string | null): Promi
           revenue: null,
         }];
       })(),
-      sets: parseSets(wikitext),
+      sets: [], // filled in below by the HTML pipeline
       prevTour: box.last_tour ? clean(box.last_tour) : null,
       nextTour: box.next_tour ? clean(box.next_tour) : null,
     };
+
+    /* Set lists: rendered HTML first (labels survive there), validated, with
+       Claude as a last resort for articles whose markup defeats the walker. */
+    const performers = [
+      ...(info.artist ? info.artist.split(/\s*(?:&|,|\band\b)\s*/i).map((x) => x.trim()) : []),
+      ...info.supportActs,
+    ].filter((x) => x && x.length > 1);
+
+    try {
+      const setlistHtml = await fetchSetlistHtml(page.title);
+      if (setlistHtml) {
+        let sets = parseSetlistHtml(setlistHtml, performers, info.artist ?? undefined);
+
+        if (looksWrong(sets, performers)) {
+          trace("setlist-suspect", `${page.title}: ${sets.length} set(s) for ${performers.length} performers`);
+          const rescued = await extractSetlistWithClaude(setlistHtml, performers);
+          if (rescued && !looksWrong(rescued, performers)) {
+            sets = rescued;
+            trace("setlist-llm", `${page.title}: recovered ${rescued.length} sets`);
+          }
+        }
+        info.sets = sets.map((s) => ({ artist: s.artist, songs: s.songs }));
+      }
+    } catch {}
 
     if (cache.size > 500) cache.clear();
     cache.set(key, { v: info, exp: Date.now() + 7 * 24 * 3600 * 1000 });

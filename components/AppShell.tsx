@@ -56,6 +56,21 @@ export function AppShell({
       } catch {}
     })();
 
+    // Pull-to-refresh: standalone iOS apps have no browser refresh gesture.
+    let startY = 0;
+    let pulling = false;
+    const onStart = (e: TouchEvent) => {
+      pulling = window.scrollY <= 0;
+      startY = e.touches[0]?.clientY ?? 0;
+    };
+    const onMove = (e: TouchEvent) => {
+      if (!pulling) return;
+      const dy = (e.touches[0]?.clientY ?? 0) - startY;
+      if (dy > 90) { pulling = false; window.location.reload(); }
+    };
+    window.addEventListener("touchstart", onStart, { passive: true });
+    window.addEventListener("touchmove", onMove, { passive: true });
+
     let unsub: (() => void) | undefined;
     (async () => {
       try {
@@ -71,7 +86,11 @@ export function AppShell({
         }
       } catch {}
     })();
-    return () => unsub?.();
+    return () => {
+      unsub?.();
+      window.removeEventListener("touchstart", onStart);
+      window.removeEventListener("touchmove", onMove);
+    };
   }, []);
 
   return (

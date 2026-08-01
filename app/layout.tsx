@@ -27,21 +27,37 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         {children}
         <script
           dangerouslySetInnerHTML={{
-            __html: `if("serviceWorker" in navigator){window.addEventListener("load",function(){navigator.serviceWorker.register("/sw.js").then(function(reg){
-              reg.addEventListener("updatefound",function(){
-                var sw=reg.installing;
-                if(!sw)return;
-                sw.addEventListener("statechange",function(){
-                  if(sw.state==="installed"&&navigator.serviceWorker.controller){sw.postMessage("skip-waiting");}
-                });
+            __html: `
+            (function(){
+              var BUILD = "${process.env.NEXT_PUBLIC_BUILD_ID ?? "dev"}";
+              var reloading = false;
+              function reloadOnce(){ if(reloading) return; reloading = true; location.reload(); }
+
+              // iOS freezes a home-screen app instead of reloading it, so
+              // returning to the app is the only moment we get to check.
+              function checkBuild(){
+                fetch("/version.json", { cache: "no-store" })
+                  .then(function(r){ return r.json(); })
+                  .then(function(d){ if(d && d.buildId && BUILD !== "dev" && d.buildId !== BUILD) reloadOnce(); })
+                  .catch(function(){});
+                if ("serviceWorker" in navigator) {
+                  navigator.serviceWorker.getRegistration().then(function(reg){ if(reg) reg.update(); }).catch(function(){});
+                }
+              }
+
+              document.addEventListener("visibilitychange", function(){
+                if (document.visibilityState === "visible") checkBuild();
               });
-              setInterval(function(){reg.update().catch(function(){});},60000);
-            }).catch(function(){});
-            var reloading=false;
-            navigator.serviceWorker.addEventListener("controllerchange",function(){
-              if(reloading)return;reloading=true;window.location.reload();
-            });
-          })}`,
+              window.addEventListener("pageshow", function(){ checkBuild(); });
+
+              if ("serviceWorker" in navigator) {
+                window.addEventListener("load", function(){
+                  navigator.serviceWorker.register("/sw.js", { updateViaCache: "none" }).catch(function(){});
+                });
+                navigator.serviceWorker.addEventListener("controllerchange", reloadOnce);
+              }
+            })();
+          `,
           }}
         />
       </body>

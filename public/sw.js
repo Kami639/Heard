@@ -1,17 +1,20 @@
-// Network-first for code and pages, cache-first for images.
-// A stale bundle is why the app seemed to need closing and reopening to show
-// updates — now the newest deploy always wins when the network is available,
-// and the cache is only a fallback for offline.
+// The service worker deliberately does NOT touch navigations or HTML.
+//
+// A network-first navigation handler still falls back to a cached shell the
+// moment a cold start races the network — which on iOS is the only moment a
+// new version can land, so the app appeared stuck until it was force-quit.
+// Now HTML always comes from the network, and the cache only holds hashed
+// static assets and images, which can never be stale by definition.
 
-const SHELL = "heard-shell-v2";
-const IMAGES = "heard-img-v2";
+const ASSETS = "heard-assets-v3";
+const IMAGES = "heard-img-v3";
 
 self.addEventListener("install", () => self.skipWaiting());
 
 self.addEventListener("activate", (e) => {
   e.waitUntil(
     caches.keys()
-      .then((keys) => Promise.all(keys.filter((k) => k !== SHELL && k !== IMAGES).map((k) => caches.delete(k))))
+      .then((keys) => Promise.all(keys.filter((k) => k !== ASSETS && k !== IMAGES).map((k) => caches.delete(k))))
       .then(() => self.clients.claim())
   );
 });
@@ -23,34 +26,24 @@ self.addEventListener("message", (e) => {
 self.addEventListener("fetch", (e) => {
   const req = e.request;
   if (req.method !== "GET") return;
-
+  if (req.mode === "navigate") return;              // never intercept pages
   const url = new URL(req.url);
-  if (url.origin !== self.location.origin) return; // never touch API calls
+  if (url.origin !== self.location.origin) return;
   if (url.pathname.startsWith("/api/")) return;
+  if (url.pathname === "/version.json" || url.pathname === "/sw.js") return;
 
+  const hashed = url.pathname.startsWith("/_next/static/");
   const isImage = req.destination === "image";
-
-  if (isImage) {
-    e.respondWith(
-      caches.match(req).then((hit) =>
-        hit ||
-        fetch(req).then((res) => {
-          const copy = res.clone();
-          caches.open(IMAGES).then((c) => c.put(req, copy)).catch(() => {});
-          return res;
-        })
-      )
-    );
-    return;
-  }
+  if (!hashed && !isImage) return;                  // everything else: network
 
   e.respondWith(
-    fetch(req)
-      .then((res) => {
+    caches.match(req).then((hit) =>
+      hit ||
+      fetch(req).then((res) => {
         const copy = res.clone();
-        caches.open(SHELL).then((c) => c.put(req, copy)).catch(() => {});
+        caches.open(isImage ? IMAGES : ASSETS).then((c) => c.put(req, copy)).catch(() => {});
         return res;
       })
-      .catch(() => caches.match(req))
+    )
   );
 });
