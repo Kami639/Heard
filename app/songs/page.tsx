@@ -107,16 +107,18 @@ export default function Songs() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // fill in any missing artist photos for the list
+  // Fill in missing artist photos, a few at a time, until the list is covered.
   useEffect(() => {
-    const names = [...new Set(songs.flatMap((s) => splitArtists(s.artist)))];
-    const missing = names.filter((n) => !artistPhotos[n.toLowerCase()]);
+    const missing = [...new Set(songs.flatMap((s) => splitArtists(s.artist)))]
+      .filter((n) => !photoFor(n));
     if (!missing.length) return;
     let alive = true;
-    warmPhotos(missing).then(() => { if (alive) setPhotoTick((v) => v + 1); });
+    warmPhotos(missing).then((changed) => {
+      if (alive && changed) setPhotoTick((v) => v + 1); // triggers the next batch
+    });
     return () => { alive = false; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [songs.length]);
+  }, [songs.length, photoTick]);
 
   return (
     <AppShell title="songs" count={total}>
@@ -142,6 +144,39 @@ export default function Songs() {
                 <div className={`truncate text-sm ${playingKey === key ? "font-semibold text-accent" : ""}`}>{s.song}</div>
                 <div className="truncate font-mono text-[10px] text-sub">{s.artist}</div>
               </div>
+              {(() => {
+                const names = splitArtists(s.artist).slice(0, 3);
+                if (!names.length) return null;
+                const shown = names.slice(0, 2);
+                const extra = names.length - shown.length;
+                return (
+                  <span className="flex shrink-0 items-center">
+                    {shown.map((name, idx) => {
+                      const url = photoFor(name);
+                      return (
+                        <span
+                          key={`${name}-${idx}`}
+                          title={name}
+                          style={{ marginLeft: idx === 0 ? 0 : -9, zIndex: shown.length - idx }}
+                          className="flex h-6 w-6 items-center justify-center overflow-hidden rounded-full border border-bg bg-card2 text-[9px] font-bold text-sub"
+                        >
+                          {url ? (
+                            // eslint-disable-next-line @next/next/no-img-element
+                            <img src={url} alt={name} className="h-full w-full object-cover" />
+                          ) : (
+                            name.replace(/[^A-Za-z ]/g, "").slice(0, 2).toUpperCase()
+                          )}
+                        </span>
+                      );
+                    })}
+                    {extra > 0 && (
+                      <span className="ml-[-9px] flex h-6 w-6 items-center justify-center rounded-full border border-bg bg-card2 text-[9px] font-bold text-accent">
+                        +{extra}
+                      </span>
+                    )}
+                  </span>
+                );
+              })()}
               {songStatus[key] === "unreleased" && (
                 <a
                   href={`https://soundcloud.com/search?q=${encodeURIComponent(`${s.artist} ${s.song}`)}`}
