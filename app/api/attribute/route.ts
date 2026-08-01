@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { politeJson } from "@/lib/requestQueue";
+import { titleAccepted, artistAccepted, isJunkArtist, titleVariants, pickTrack } from "@/lib/songMatch";
+import { artistCatalogue } from "@/lib/catalogue";
 
 /* Who actually performed this song, given everyone who played that night?
    Checked against real catalogues instead of assuming the headliner, so
@@ -13,22 +15,19 @@ const base = (x: string) => norm(x.replace(/\(.*?\)|\[.*?\]/g, "").split(/\s+(?:
 
 const cache = new Map<string, { v: any; exp: number }>();
 
-function titleMatch(a: string, b: string) {
-  const na = base(a), nb = base(b);
-  if (!na || !nb) return false;
-  if (na === nb) return true;
-  if (na.length <= 5 || nb.length <= 5) return false; // "X" must be exactly "X"
-  return na.startsWith(nb) || nb.startsWith(na);
-}
+// one matcher for the whole app: stylization-aware, exact for short titles
+const titleMatch = (a: string, b: string) => titleAccepted(b, a);
 
 /** Deezer: does this artist have this track? Returns the full credit string. */
 async function deezerCredit(artist: string, song: string): Promise<string | null> {
   try {
-    const q = `artist:"${artist}" track:"${song}"`;
+    const spelling = [...titleVariants(song)][0] ?? song;
+    const q = `artist:"${artist}" track:"${spelling}"`;
     const data = await politeJson<any>(`https://api.deezer.com/search?q=${encodeURIComponent(q)}&limit=5`);
     const items = data?.data ?? [];
     const hit = items.find(
-      (r: any) => titleMatch(r.title ?? "", song) && base(r.artist?.name ?? "") === base(artist)
+      (r: any) => !isJunkArtist(r.artist?.name ?? "") &&
+        titleMatch(r.title ?? "", song) && artistAccepted(r.artist?.name ?? "", artist)
     );
     return hit ? `${hit.artist?.name ?? artist}::${hit.title ?? song}` : null;
   } catch { return null; }
@@ -36,11 +35,13 @@ async function deezerCredit(artist: string, song: string): Promise<string | null
 
 async function itunesCredit(artist: string, song: string): Promise<string | null> {
   try {
-    const qs = new URLSearchParams({ term: `${artist} ${song}`, media: "music", entity: "song", limit: "5" });
+    const spelling = [...titleVariants(song)][0] ?? song;
+    const qs = new URLSearchParams({ term: `${artist} ${spelling}`, media: "music", entity: "song", limit: "8" });
     const data = await politeJson<any>(`https://itunes.apple.com/search?${qs}`, { ttl: 7 * 24 * 3600 * 1000 });
     const items = data?.results ?? [];
     const hit = items.find(
-      (r: any) => titleMatch(r.trackName ?? "", song) && base(r.artistName ?? "") === base(artist)
+      (r: any) => !isJunkArtist(r.artistName ?? "") &&
+        titleMatch(r.trackName ?? "", song) && artistAccepted(r.artistName ?? "", artist)
     );
     return hit ? `${hit.artistName ?? artist}::${hit.trackName ?? song}` : null;
   } catch { return null; }
@@ -85,11 +86,18 @@ export async function GET(req: NextRequest) {
     return NextResponse.json(v);
   };
 
-  // 1) catalogue check, all candidates in parallel
+  // 1) catalogue check, all candidates in parallel. Search first (fast), then
+  // the artist's full catalogue, which is the only thing that can match a
+  // stylized title from a plain one.
   const found = await Promise.all(
     artists.map(async (a) => {
       const credit = (await deezerCredit(a, song)) ?? (await itunesCredit(a, song));
-      return credit ? { artist: a, credit } : null;
+      if (credit) return { artist: a, credit };
+      try {
+        const hit = pickTrack(await artistCatalogue(a), song, [a]);
+        if (hit) return { artist: a, credit: `${hit.artist}::${hit.title}` };
+      } catch {}
+      return null;
     })
   );
   const owners = found.filter(Boolean) as { artist: string; credit: string }[];

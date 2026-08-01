@@ -1,4 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
+import { pickTrack, titleVariants, type Candidate } from "@/lib/songMatch";
+import { artistCatalogue } from "@/lib/catalogue";
 
 // Song previews with artist verification.
 // Handles multi-artist billings ("Teezus & Diamond" -> try Teezus, try Diamond)
@@ -62,6 +64,15 @@ function nameMatches(candidate: string, target: string): boolean {
   return false;
 }
 
+/** Is `cand` credited on this track as a featured artist?
+ *  iTunes/Deezer put features in the TITLE ("FE!N (feat. Playboi Carti)"),
+ *  not the artist field, so a strict artist check misses them entirely. */
+function featuredIn(trackTitle: string, cand: string): boolean {
+  const nt = norm(trackTitle), nc = norm(cand);
+  if (!nt || !nc || nc.length < 4) return false;
+  return /feat|ft|with|amp|and/.test(nt) ? nt.includes(nc) : false;
+}
+
 function titleMatches(a: string, b: string): boolean {
   const na = norm(a), nb = norm(b);
   if (!na || !nb) return false;
@@ -103,42 +114,72 @@ export async function GET(req: NextRequest) {
     return NextResponse.json(payload);
   };
 
-  // 1) iTunes, per candidate
+  // Query with BOTH the stylized spelling and a plain reading of it, since
+  // catalogues store one or the other ("FE!N" vs "FEIN").
+  const spellings = [song, ...[...titleVariants(song)].slice(0, 2)];
+
+  // 1) iTunes
   for (const cand of candidates) {
-    try {
-      const qs = new URLSearchParams({
-        term: `${cand} ${song}`, media: "music", entity: "song", limit: "10",
-      });
-      const res = await fetch(`https://itunes.apple.com/search?${qs}`, {
-        next: { revalidate: 604800 },
-      });
-      if (!res.ok) continue;
-      const items = (await res.json()).results ?? [];
-      const matches = items.filter(
-        (r: any) => artistOk(r.artistName ?? "") && titleMatches(r.trackName ?? "", song)
-      );
-      if (matches.length) trackExists = true;
-      const hit = matches.find((r: any) => r.previewUrl);
-      if (hit) return respond({ previewUrl: hit.previewUrl, status: "ok" });
-    } catch {}
+    for (const spelling of [...new Set(spellings)]) {
+      try {
+        const qs = new URLSearchParams({
+          term: `${cand} ${spelling}`, media: "music", entity: "song", limit: "12",
+        });
+        const res = await fetch(`https://itunes.apple.com/search?${qs}`, { next: { revalidate: 604800 } });
+        if (!res.ok) continue;
+        const items = (await res.json()).results ?? [];
+        const pool: Candidate[] = items.map((r: any) => ({
+          title: r.trackName ?? "",
+          artist: r.artistName ?? "",
+          previewUrl: r.previewUrl ?? null,
+          durationMs: r.trackTimeMillis ?? null,
+        }));
+        const hit = pickTrack(pool, song, candidates);
+        if (hit) {
+          trackExists = true;
+          if (hit.previewUrl) return respond({ previewUrl: hit.previewUrl, status: "ok" });
+        }
+      } catch {}
+    }
   }
 
-  // 2) Deezer, per candidate
+  // 2) Deezer
   for (const cand of candidates) {
+    for (const spelling of [...new Set(spellings)]) {
+      try {
+        const q = `artist:"${cand}" track:"${spelling}"`;
+        const res = await fetch(`https://api.deezer.com/search?q=${encodeURIComponent(q)}&limit=12`, {
+          next: { revalidate: 604800 },
+        });
+        if (!res.ok) continue;
+        const items = (await res.json()).data ?? [];
+        const pool: Candidate[] = items.map((r: any) => ({
+          title: r.title ?? "",
+          artist: r.artist?.name ?? "",
+          previewUrl: r.preview ?? null,
+          durationMs: r.duration ? r.duration * 1000 : null,
+        }));
+        const hit = pickTrack(pool, song, candidates);
+        if (hit) {
+          trackExists = true;
+          if (hit.previewUrl) return respond({ previewUrl: hit.previewUrl, status: "ok" });
+        }
+      } catch {}
+    }
+  }
+
+  // 2b) Their search engines can't find a stylized title from a plain one
+  // ("Fein" will never surface "FE!N"), so pull the artist's catalogue and
+  // do the matching on our side.
+  for (const cand of candidates.slice(0, 3)) {
     try {
-      const q = `artist:"${cand}" track:"${song}"`;
-      const res = await fetch(
-        `https://api.deezer.com/search?q=${encodeURIComponent(q)}&limit=10`,
-        { next: { revalidate: 604800 } }
-      );
-      if (!res.ok) continue;
-      const items = (await res.json()).data ?? [];
-      const matches = items.filter(
-        (r: any) => artistOk(r.artist?.name ?? "") && titleMatches(r.title ?? "", song)
-      );
-      if (matches.length) trackExists = true;
-      const hit = matches.find((r: any) => r.preview);
-      if (hit) return respond({ previewUrl: hit.preview, status: "ok" });
+      const catalogue = await artistCatalogue(cand);
+      if (!catalogue.length) continue;
+      const hit = pickTrack(catalogue, song, [cand]);
+      if (hit) {
+        trackExists = true;
+        if (hit.previewUrl) return respond({ previewUrl: hit.previewUrl, status: "ok" });
+      }
     } catch {}
   }
 
@@ -189,7 +230,13 @@ export async function GET(req: NextRequest) {
     const res = await fetch(`https://itunes.apple.com/search?${qs}`, { next: { revalidate: 604800 } });
     if (res.ok) {
       const items = (await res.json()).results ?? [];
-      const hit = items.find((r: any) => r.previewUrl && norm(r.trackName ?? "") === norm(song));
+      const exact = items.filter((r: any) => r.previewUrl && norm(r.trackName ?? "") === norm(song));
+      // if any version involves someone who actually played the show, use it
+      const hit =
+        exact.find((r: any) => candidates.some((c) => nameMatches(r.artistName ?? "", c) || featuredIn(r.trackName ?? "", c))) ??
+        exact.find((r: any) => !/karaoke|tribute|cover band|made famous|instrumental/i.test(
+          `${r.artistName ?? ""} ${r.collectionName ?? ""}`
+        ));
       if (hit) {
         return NextResponse.json({ previewUrl: hit.previewUrl, status: "ok", coverArtist: hit.artistName ?? null });
       }

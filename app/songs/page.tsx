@@ -8,6 +8,7 @@ import { getConcerts } from "@/lib/store";
 import { useConcerts } from "@/lib/useConcerts";
 import { splitArtists } from "@/features/concerts/data";
 import { needsCredits, fixAllCredits } from "@/lib/credits";
+import { cachedPhoto, warmPhotos } from "@/lib/artistPhotos";
 import { useRef } from "react";
 
 interface SongCount { song: string; artist: string; count: number }
@@ -53,14 +54,19 @@ export default function Songs() {
 
   // songs are derived state — recomputed whenever the archive changes
   // one photo lookup per artist, reused across every row
+  const [photoTick, setPhotoTick] = useState(0);
+
   const artistPhotos = useMemo(() => {
     const map: Record<string, string> = {};
     for (const c of concerts) {
       for (const a of c.artists ?? []) if (a.imageUrl) map[a.name.toLowerCase()] = a.imageUrl;
-      if (c.imageUrl) map[(splitArtists(c.artist)[0] ?? "").toLowerCase()] ??= c.imageUrl;
     }
     return map;
-  }, [concerts]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [concerts, photoTick]);
+
+  const photoFor = (name: string) =>
+    artistPhotos[name.toLowerCase()] ?? cachedPhoto(name) ?? null;
 
   const { songs, total } = useMemo(() => {
     const map = new Map<string, SongCount>();
@@ -100,6 +106,17 @@ export default function Songs() {
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // fill in any missing artist photos for the list
+  useEffect(() => {
+    const names = [...new Set(songs.flatMap((s) => splitArtists(s.artist)))];
+    const missing = names.filter((n) => !artistPhotos[n.toLowerCase()]);
+    if (!missing.length) return;
+    let alive = true;
+    warmPhotos(missing).then(() => { if (alive) setPhotoTick((v) => v + 1); });
+    return () => { alive = false; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [songs.length]);
 
   return (
     <AppShell title="songs" count={total}>
