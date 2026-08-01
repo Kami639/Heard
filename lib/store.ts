@@ -1,6 +1,7 @@
 "use client";
 
 import { SEED_CONCERTS, sanitizeConcert, type ConcertRec } from "@/features/concerts/data";
+import { now as hlcNow } from "./hlc";
 
 const KEY = "heard.concerts.v1";
 
@@ -39,7 +40,7 @@ export function getConcerts(): ConcertRec[] {
 
 export function updateConcert(id: string, patch: Partial<ConcertRec>) {
   const added: ConcertRec[] = JSON.parse(localStorage.getItem(KEY) ?? "[]");
-  const next = added.map((c) => (c.id === id ? { ...c, ...patch, updatedAt: Date.now() } : c));
+  const next = added.map((c) => (c.id === id ? { ...c, ...patch, updatedAt: Date.now(), hlc: hlcNow() } : c));
   localStorage.setItem(KEY, JSON.stringify(next));
   announce();
   const changed = next.find((c) => c.id === id);
@@ -50,11 +51,11 @@ export function deleteConcert(id: string) {
   const added: ConcertRec[] = JSON.parse(localStorage.getItem(KEY) ?? "[]");
   localStorage.setItem(KEY, JSON.stringify(added.filter((c) => c.id !== id)));
   announce();
-  import("./sync").then((m) => m.removeConcertRemote(id)).catch(() => {});
+  import("./sync").then((m) => { m.markDeleted(id); m.removeConcertRemote(id); }).catch(() => {});
 }
 
 export function addConcert(c: ConcertRec) {
-  const stamped = { ...c, updatedAt: Date.now() };
+  const stamped = { ...c, updatedAt: Date.now(), hlc: hlcNow() };
   const added: ConcertRec[] = JSON.parse(localStorage.getItem(KEY) ?? "[]");
   localStorage.setItem(KEY, JSON.stringify([stamped, ...added]));
   announce();

@@ -1,4 +1,5 @@
 import * as cheerio from "cheerio";
+import { politeJson } from "./requestQueue";
 
 /* Parsing Wikipedia tables from RENDERED HTML rather than raw wikitext.
    MediaWiki has already expanded templates, resolved {{Start date}}, and
@@ -78,18 +79,8 @@ export async function fetchRenderedHtml(title: string): Promise<string | null> {
     action: "parse", page: title, prop: "text", formatversion: "2",
     format: "json", redirects: "1",
   });
-  try {
-    const res = await fetch(`https://en.wikipedia.org/w/api.php?${qs}`, {
-      headers: {
-        "User-Agent": "heard-concert-archive/1.0 (https://heard-beryl.vercel.app; github.com/Kami639/Heard)",
-        Accept: "application/json",
-      },
-      cache: "no-store",
-    });
-    if (!res.ok) return null;
-    const data = await res.json();
-    return data?.parse?.text ?? null;
-  } catch {
-    return null;
-  }
+  const data = await politeJson<any>(`https://en.wikipedia.org/w/api.php?${qs}`, {
+    ttl: 7 * 24 * 3600 * 1000,
+  });
+  return data?.parse?.text ?? null;
 }

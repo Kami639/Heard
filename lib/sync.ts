@@ -5,8 +5,24 @@
 
 import { getSupabase } from "./supabase";
 import type { ConcertRec } from "@/features/concerts/data";
+import { isNewer, observe } from "./hlc";
 
 const KEY = "heard.concerts.v1";
+const GRAVE = "heard.deleted.v1";
+
+/** Deletions have to sync as a fact, not as an absence — otherwise another
+ *  device still holding the row just re-uploads it and it comes back. */
+function readGraveyard(): Record<string, number> {
+  try { return JSON.parse(localStorage.getItem(GRAVE) ?? "{}"); } catch { return {}; }
+}
+export function markDeleted(id: string) {
+  const g = readGraveyard();
+  g[id] = Date.now();
+  // forget tombstones after 90 days — long past any device catching up
+  const cutoff = Date.now() - 90 * 24 * 3600 * 1000;
+  for (const [k, t] of Object.entries(g)) if (t < cutoff) delete g[k];
+  try { localStorage.setItem(GRAVE, JSON.stringify(g)); } catch {}
+}
 
 function readLocal(): ConcertRec[] {
   try { return JSON.parse(localStorage.getItem(KEY) ?? "[]"); } catch { return []; }
@@ -53,18 +69,33 @@ export async function fullSync(force = false) {
   if (error) return;
 
   const local = readLocal();
+  const graveyard = readGraveyard();
   const localMap = new Map(local.map((c) => [c.id, c]));
   const merged = new Map<string, ConcertRec>(localMap);
   const toPush: ConcertRec[] = [];
 
   for (const row of rows ?? []) {
-    const remote: ConcertRec = { ...row.data, updatedAt: +new Date(row.updated_at) };
-    const mine = localMap.get(row.id);
-    if (!mine || (remote.updatedAt ?? 0) > (mine.updatedAt ?? 0)) {
-      merged.set(row.id, remote);
-    } else if ((mine.updatedAt ?? 0) > (remote.updatedAt ?? 0)) {
-      toPush.push(mine);
+    // deleted here? push the delete instead of accepting the row back
+    const buried = graveyard[row.id];
+    if (buried && buried >= +new Date(row.updated_at)) {
+      await removeConcertRemote(row.id);
+      continue;
     }
+    const remote: ConcertRec = { ...row.data, updatedAt: +new Date(row.updated_at) };
+    observe(remote.hlc); // keep our clock ahead of anything we've seen
+    const mine = localMap.get(row.id);
+
+    const remoteWins = !mine
+      || (remote.hlc || mine.hlc
+        ? isNewer(remote.hlc, mine.hlc)
+        : (remote.updatedAt ?? 0) > (mine.updatedAt ?? 0));
+    const localWins = mine && !remoteWins
+      && (remote.hlc || mine.hlc
+        ? isNewer(mine.hlc, remote.hlc)
+        : (mine.updatedAt ?? 0) > (remote.updatedAt ?? 0));
+
+    if (remoteWins) merged.set(row.id, remote);
+    else if (localWins) toPush.push(mine!);
   }
   const remoteIds = new Set((rows ?? []).map((r: any) => r.id));
   for (const c of local) if (!remoteIds.has(c.id)) toPush.push(c);

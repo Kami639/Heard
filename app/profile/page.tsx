@@ -6,6 +6,7 @@ import { LcdStat } from "@/components/lcd/LcdStat";
 import { getConcerts, deleteConcert } from "@/lib/store";
 import { deleteMedia } from "@/lib/media";
 import { getSupabase } from "@/lib/supabase";
+import { publishProfile, unpublishProfile, myCode, friends, removeFriend, fetchProfile, addFriend } from "@/lib/social";
 import { useRouter } from "next/navigation";
 import { uniqueShowCount, type ConcertRec } from "@/features/concerts/data";
 
@@ -95,6 +96,32 @@ export default function Profile() {
     } catch {}
   }
 
+  function download(name: string, text: string, type: string) {
+    const a = document.createElement("a");
+    a.download = name;
+    a.href = URL.createObjectURL(new Blob([text], { type }));
+    a.click();
+    URL.revokeObjectURL(a.href);
+  }
+
+  function exportFull() {
+    download(
+      `heard-backup-${new Date().toISOString().slice(0, 10)}.json`,
+      JSON.stringify({ version: 1, exported: new Date().toISOString(), concerts }, null, 2),
+      "application/json"
+    );
+  }
+
+  function exportCsv() {
+    const esc = (v: unknown) => `"${String(v ?? "").replace(/"/g, '""')}"`;
+    const head = ["Artist", "Tour", "Venue", "City", "Country", "Date", "Rating", "Price", "Songs", "Notes"];
+    const rows = concerts.map((c) => [
+      c.artist, c.tour, c.venue, c.city, c.country ?? "", c.dateDisplay,
+      c.rating, c.price, c.setlist.length, (c.notes ?? "").replace(/\n/g, " "),
+    ].map(esc).join(","));
+    download(`heard-${new Date().toISOString().slice(0, 10)}.csv`, [head.map(esc).join(","), ...rows].join("\n"), "text/csv");
+  }
+
   function exportArchive() {
     const data = JSON.stringify({
       name: userEmail?.split("@")[0] ?? "Friend",
@@ -148,6 +175,34 @@ export default function Profile() {
   }
 
   const [wipeStep, setWipeStep] = useState<0 | 1 | 2>(0);
+  const [shareCode, setShareCode] = useState<string | null>(null);
+  const [friendList, setFriendList] = useState<{ code: string; name: string }[]>([]);
+  const [lookup, setLookup] = useState("");
+  const [publishing, setPublishing] = useState(false);
+
+  useEffect(() => {
+    setShareCode(myCode());
+    setFriendList(friends());
+  }, []);
+
+  async function publish() {
+    setPublishing(true);
+    const name = prompt("Name for your archive?", userEmail?.split("@")[0] ?? "") ?? "";
+    const c = await publishProfile(name);
+    setPublishing(false);
+    if (c) { setShareCode(c); alert(`Published. Share this code: ${c}`); }
+    else alert("Sign in first — publishing needs an account.");
+  }
+
+  async function openFriend() {
+    const c = lookup.trim().toLowerCase();
+    if (!c) return;
+    const p = await fetchProfile(c);
+    if (!p) { alert("No archive found for that code."); return; }
+    addFriend(p.code, p.name);
+    setFriendList(friends());
+    router.push(`/u/${p.code}`);
+  }
 
   async function wipeEverything() {
     const all = getConcerts();
@@ -355,6 +410,86 @@ export default function Profile() {
           <LcdStat label="Spent" value={`$${attended.reduce((s, c) => s + c.price, 0)}`} />
           <LcdStat label="Songs heard" value={attended.reduce((s, c) => s + c.setlist.length, 0)} />
         </div>
+        <div className="rounded-2xl bg-card p-4">
+          <p className="text-[15px] font-semibold">Share your archive</p>
+          <p className="pt-1 text-xs text-sub">
+            Publish a read-only copy and give friends the code. Nothing is shared until you publish.
+          </p>
+          {shareCode ? (
+            <div className="flex flex-col gap-2 pt-3">
+              <div className="flex items-center gap-2 rounded-lg bg-card2 px-3 py-2">
+                <span className="flex-1 font-mono text-lg tracking-[0.25em] text-accent">{shareCode}</span>
+                <button
+                  onClick={() => { navigator.clipboard?.writeText(`${window.location.origin}/u/${shareCode}`); alert("Link copied"); }}
+                  className="pressable rounded-full bg-card px-3 py-1 text-[11px] text-accent"
+                >
+                  Copy link
+                </button>
+              </div>
+              <div className="flex gap-2">
+                <button onClick={publish} disabled={publishing} className="pressable flex-1 rounded-lg bg-card2 py-2 text-xs text-accent disabled:opacity-50">
+                  {publishing ? "…" : "Update snapshot"}
+                </button>
+                <button
+                  onClick={async () => { await unpublishProfile(); setShareCode(null); }}
+                  className="pressable flex-1 rounded-lg bg-card2 py-2 text-xs text-sub"
+                >
+                  Unpublish
+                </button>
+              </div>
+            </div>
+          ) : (
+            <button onClick={publish} disabled={publishing} className="pressable mt-3 w-full rounded-lg bg-accent py-2 text-sm font-bold text-black disabled:opacity-50">
+              {publishing ? "Publishing…" : "Publish my archive"}
+            </button>
+          )}
+
+          <div className="flex gap-2 pt-4">
+            <input
+              value={lookup}
+              onChange={(e) => setLookup(e.target.value.replace(/\s/g, ""))}
+              onKeyDown={(e) => e.key === "Enter" && openFriend()}
+              placeholder="friend's code"
+              className="min-w-0 flex-1 rounded-lg bg-card2 px-3 py-2 font-mono text-sm tracking-widest text-ink outline-none placeholder:font-sans placeholder:tracking-normal placeholder:text-sub"
+            />
+            <button onClick={openFriend} className="pressable shrink-0 rounded-lg bg-card2 px-4 py-2 text-sm text-accent">
+              View
+            </button>
+          </div>
+
+          {friendList.length > 0 && (
+            <div className="flex flex-wrap gap-2 pt-3">
+              {friendList.map((f) => (
+                <span key={f.code} className="flex items-center gap-1.5 rounded-full bg-card2 px-2.5 py-1 text-xs">
+                  <button onClick={() => router.push(`/u/${f.code}`)} className="pressable max-w-[120px] truncate">
+                    {f.name}
+                  </button>
+                  <button
+                    onClick={() => { removeFriend(f.code); setFriendList(friends()); }}
+                    className="pressable text-[10px] text-sub"
+                    aria-label={`Remove ${f.name}`}
+                  >
+                    ✕
+                  </button>
+                </span>
+              ))}
+            </div>
+          )}
+        </div>
+
+        <div className="rounded-2xl bg-card p-4">
+          <p className="text-[15px] font-semibold">Backup</p>
+          <p className="pt-1 text-xs text-sub">Keep a copy of everything — phones lose data, apps get cleared.</p>
+          <div className="flex gap-2 pt-3">
+            <button onClick={exportFull} className="pressable flex-1 rounded-lg bg-card2 py-2 text-sm text-accent">
+              Full backup (JSON)
+            </button>
+            <button onClick={exportCsv} className="pressable flex-1 rounded-lg bg-card2 py-2 text-sm text-accent">
+              Spreadsheet (CSV)
+            </button>
+          </div>
+        </div>
+
         <div className="rounded-2xl bg-card p-4">
           <p className="text-[15px] font-semibold">Danger zone</p>
           {wipeStep === 0 && (

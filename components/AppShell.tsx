@@ -46,6 +46,16 @@ export function AppShell({
       })();
     }
 
+    // iOS can evict photos/videos when storage is only "best effort", and the
+    // grant resets between sessions — so ask every launch.
+    (async () => {
+      try {
+        if (navigator.storage?.persist && !(await navigator.storage.persisted())) {
+          await navigator.storage.persist();
+        }
+      } catch {}
+    })();
+
     let unsub: (() => void) | undefined;
     (async () => {
       try {

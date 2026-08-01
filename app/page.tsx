@@ -6,23 +6,31 @@ import { ChevronRight, Music2, Disc3, Trophy, Images } from "lucide-react";
 import { AppShell } from "@/components/AppShell";
 import { Art, Stars } from "@/components/Art";
 import { LcdStat } from "@/components/lcd/LcdStat";
+import { useConcerts } from "@/lib/useConcerts";
 import { getConcerts, daysUntil } from "@/lib/store";
-import { uniqueShowCount } from "@/features/concerts/data";
+import { uniqueShowCount, splitArtists } from "@/features/concerts/data";
 import type { ConcertRec } from "@/features/concerts/data";
 
 export default function Home() {
   const router = useRouter();
-  const [concerts, setConcerts] = useState<ConcertRec[]>([]);
-  useEffect(() => {
-    const load = () => setConcerts(getConcerts());
-    load();
-    window.addEventListener("heard-sync", load);
-    return () => window.removeEventListener("heard-sync", load);
-  }, []);
+  const concerts = useConcerts();
 
   const attended = concerts.filter((c) => !c.cancelled);
   const latest = concerts[0];
   const cities = new Set(attended.map((c) => c.city)).size;
+  const [upcoming, setUpcoming] = useState<any[]>([]);
+
+  useEffect(() => {
+    const artists = [...new Set(concerts.flatMap((c) => splitArtists(c.artist)))].slice(0, 8);
+    if (!artists.length) return;
+    const ac = new AbortController();
+    fetch(`/api/upcoming?artists=${encodeURIComponent(artists.join("|"))}`, { signal: ac.signal })
+      .then((r) => r.json())
+      .then((d) => setUpcoming(d.shows ?? []))
+      .catch(() => {});
+    return () => ac.abort();
+  }, [concerts.length]);
+
   const today = new Date();
   const capsule = attended.find((c) => {
     const d = new Date(c.dateDisplay);
@@ -65,6 +73,30 @@ export default function Home() {
           </button>
         )}
 
+        {upcoming.length > 0 && (
+          <div className="fade-up">
+            <p className="pb-2 pl-1 text-xs font-semibold tracking-wide text-accent">COMING UP</p>
+            <div className="-mx-5 flex snap-x gap-2 overflow-x-auto px-5 pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+              {upcoming.slice(0, 8).map((u, i) => {
+                const days = Math.ceil((+new Date(u.date) - Date.now()) / 86400000);
+                return (
+                  <button
+                    key={`${u.artist}-${u.date}-${i}`}
+                    onClick={() => router.push(`/tour/${encodeURIComponent(u.tour)}?artist=${encodeURIComponent(u.artist)}`)}
+                    className="pressable min-w-[150px] snap-start rounded-2xl bg-card p-3 text-left"
+                  >
+                    <p className="truncate text-[13px] font-semibold">{u.artist}</p>
+                    <p className="truncate text-[11px] text-sub">{u.city}</p>
+                    <p className="truncate text-[11px] text-sub">{u.venue}</p>
+                    <p className="pt-1 text-[11px] font-semibold text-accent">
+                      {days <= 0 ? "today" : `in ${days} ${days === 1 ? "day" : "days"}`}
+                    </p>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        )}
         {capsule && (
           <button
             onClick={() => router.push(`/concert/${capsule.id}`)}

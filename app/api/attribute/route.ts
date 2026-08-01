@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { politeJson } from "@/lib/requestQueue";
 
 /* Who actually performed this song, given everyone who played that night?
    Checked against real catalogues instead of assuming the headliner, so
@@ -14,16 +15,18 @@ const cache = new Map<string, { v: any; exp: number }>();
 
 function titleMatch(a: string, b: string) {
   const na = base(a), nb = base(b);
-  return !!na && !!nb && (na === nb || na.startsWith(nb) || nb.startsWith(na));
+  if (!na || !nb) return false;
+  if (na === nb) return true;
+  if (na.length <= 5 || nb.length <= 5) return false; // "X" must be exactly "X"
+  return na.startsWith(nb) || nb.startsWith(na);
 }
 
 /** Deezer: does this artist have this track? Returns the full credit string. */
 async function deezerCredit(artist: string, song: string): Promise<string | null> {
   try {
     const q = `artist:"${artist}" track:"${song}"`;
-    const res = await fetch(`https://api.deezer.com/search?q=${encodeURIComponent(q)}&limit=5`, { cache: "no-store" });
-    if (!res.ok) return null;
-    const items = (await res.json()).data ?? [];
+    const data = await politeJson<any>(`https://api.deezer.com/search?q=${encodeURIComponent(q)}&limit=5`);
+    const items = data?.data ?? [];
     const hit = items.find(
       (r: any) => titleMatch(r.title ?? "", song) && base(r.artist?.name ?? "") === base(artist)
     );
@@ -34,9 +37,8 @@ async function deezerCredit(artist: string, song: string): Promise<string | null
 async function itunesCredit(artist: string, song: string): Promise<string | null> {
   try {
     const qs = new URLSearchParams({ term: `${artist} ${song}`, media: "music", entity: "song", limit: "5" });
-    const res = await fetch(`https://itunes.apple.com/search?${qs}`, { next: { revalidate: 604800 } });
-    if (!res.ok) return null;
-    const items = (await res.json()).results ?? [];
+    const data = await politeJson<any>(`https://itunes.apple.com/search?${qs}`, { ttl: 7 * 24 * 3600 * 1000 });
+    const items = data?.results ?? [];
     const hit = items.find(
       (r: any) => titleMatch(r.trackName ?? "", song) && base(r.artistName ?? "") === base(artist)
     );
@@ -44,29 +46,11 @@ async function itunesCredit(artist: string, song: string): Promise<string | null
   } catch { return null; }
 }
 
-// MusicBrainz asks for one request per second per IP — queue, never burst.
-let chain: Promise<unknown> = Promise.resolve();
-function queued<T>(fn: () => Promise<T>): Promise<T> {
-  const run = chain.then(fn, fn);
-  chain = run.then(
-    () => new Promise((r) => setTimeout(r, 1100)),
-    () => new Promise((r) => setTimeout(r, 1100))
-  );
-  return run as Promise<T>;
-}
-
 async function musicbrainzCredit(song: string, artists: string[]) {
   const escaped = song.replace(/["\\]/g, " ");
-  const data: any = await queued(async () => {
-    const qs = new URLSearchParams({ query: `recording:"${escaped}"`, fmt: "json", limit: "25" });
-    const res = await fetch(`https://musicbrainz.org/ws/2/recording?${qs}`, {
-      headers: {
-        "User-Agent": "heard-concert-archive/1.0 (https://heard-beryl.vercel.app)",
-        Accept: "application/json",
-      },
-      cache: "no-store",
-    });
-    return res.ok ? res.json() : null;
+  const qs = new URLSearchParams({ query: `recording:"${escaped}"`, fmt: "json", limit: "25" });
+  const data: any = await politeJson(`https://musicbrainz.org/ws/2/recording?${qs}`, {
+    ttl: 30 * 24 * 3600 * 1000,
   });
 
   let best: { artist: string; score: number; credited: string[] } | null = null;

@@ -69,7 +69,8 @@ function mapSetlists(list: any[]): SetlistResult[] {
 }
 
 function mapSetlist(s: any): SetlistResult {
-  const songs: SetlistSong[] = (s.sets?.set ?? []).flatMap(
+  // live responses wrap sets as { sets: { set: [] } }, the schema says set: []
+  const songs: SetlistSong[] = ((s.sets?.set ?? s.set ?? []) as any[]).flatMap(
     (set: any, i: number) =>
       (set.song ?? []).filter((song: any) => !song.tape).map((song: any) => ({
         name: song.name,

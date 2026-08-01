@@ -50,16 +50,18 @@ export default function TourPage({ params }: { params: Promise<{ name: string }>
   const [scrollY, setScrollY] = useState(0);
 
   useEffect(() => {
+    const ac = new AbortController();
     setMine(getConcerts().filter((c) => nk(c.tour ?? "") === nk(name)));
-    fetch(`/api/tour?name=${encodeURIComponent(name)}&artist=${encodeURIComponent(artistParam)}`)
+    fetch(`/api/tour?name=${encodeURIComponent(name)}&artist=${encodeURIComponent(artistParam)}`, { signal: ac.signal })
       .then((r) => r.json())
       .then((d) => { setInfo(d.tour); if (d.tour?.image) setHero(d.tour.image); })
       .catch(() => {})
       .finally(() => setLoading(false));
-    fetch(`/api/artwork?artist=${encodeURIComponent(artistParam || name)}&tour=${encodeURIComponent(name)}`)
+    fetch(`/api/artwork?artist=${encodeURIComponent(artistParam || name)}&tour=${encodeURIComponent(name)}`, { signal: ac.signal })
       .then((r) => r.json())
       .then((d) => d.imageUrl && setHero((prev) => prev ?? d.imageUrl))
       .catch(() => {});
+    return () => ac.abort();
   }, [name, artistParam, attempt]);
 
   // parallax: art drifts slower than the page

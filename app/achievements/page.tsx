@@ -2,18 +2,13 @@
 
 import { useEffect, useState } from "react";
 import { AppShell } from "@/components/AppShell";
+import { useConcerts } from "@/lib/useConcerts";
 import { getConcerts } from "@/lib/store";
 import { ACHIEVEMENTS, tally, describe } from "@/features/achievements";
 import type { ConcertRec } from "@/features/concerts/data";
 
 export default function Achievements() {
-  const [concerts, setConcerts] = useState<ConcertRec[]>([]);
-  useEffect(() => {
-    const load = () => setConcerts(getConcerts());
-    load();
-    window.addEventListener("heard-sync", load);
-    return () => window.removeEventListener("heard-sync", load);
-  }, []);
+  const concerts = useConcerts();
 
   const { unlocked, points } = tally(concerts);
   const unlockedIds = new Set(unlocked.map((a) => a.id));

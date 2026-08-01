@@ -19,6 +19,7 @@ export default function ManualAdd() {
   });
   const [lookup, setLookup] = useState<"idle" | "loading" | "off">("idle");
   const [note, setNote] = useState<string | null>(null);
+  const [scan, setScan] = useState<"idle" | "reading" | "off">("idle");
 
   const set = (k: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) =>
     setForm((f) => ({ ...f, [k]: e.target.value }));
@@ -52,6 +53,41 @@ export default function ManualAdd() {
       );
       setLookup("idle");
     } catch { setLookup("off"); }
+  }
+
+  async function scanTicket(e: React.ChangeEvent<HTMLInputElement>) {
+    const f = e.target.files?.[0];
+    if (!f) return;
+    if (f.size > 8 * 1024 * 1024) { setNote("That file's over 8MB — try a screenshot instead."); return; }
+    setScan("reading");
+    setNote(null);
+    try {
+      const data: string = await new Promise((res, rej) => {
+        const r = new FileReader();
+        r.onload = () => res(String(r.result).split(",")[1]);
+        r.onerror = () => rej(new Error("read failed"));
+        r.readAsDataURL(f);
+      });
+      const r = await fetch("/api/ticket", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ data, mediaType: f.type || "image/jpeg" }),
+      });
+      const d = await r.json();
+      if (!d.ticket) { setScan(d.configured === false ? "off" : "idle"); setNote("Couldn't read that ticket — fill it in by hand."); return; }
+      const t = d.ticket;
+      setForm((prev) => ({
+        ...prev,
+        artist: t.artist || prev.artist,
+        tour: t.tour || prev.tour,
+        venue: t.venue || prev.venue,
+        city: t.city || prev.city,
+        country: t.country || prev.country,
+        date: t.date || prev.date,
+      }));
+      setNote(`Read from your ticket${t.seat ? ` · ${t.seat}` : ""} — check it before saving.`);
+      setScan("idle");
+    } catch { setScan("idle"); setNote("Couldn't read that file."); }
   }
 
   function save() {
@@ -102,6 +138,11 @@ export default function ManualAdd() {
 
         <input className={field} placeholder="Artist(s) — separate with &" value={form.artist} onChange={set("artist")} />
         <input className={field} placeholder="Tour or festival (e.g. Dreamville Festival 2025)" value={form.tour} onChange={set("tour")} />
+
+        <label className={`pressable flex cursor-pointer items-center justify-center rounded-lg bg-card py-2.5 text-sm font-semibold ${scan === "off" ? "text-sub" : "text-accent"}`}>
+          {scan === "reading" ? "Reading your ticket…" : scan === "off" ? "Ticket scan needs an API key" : "🎫 Scan a ticket (photo or PDF)"}
+          <input type="file" accept="image/*,application/pdf" hidden onChange={scanTicket} />
+        </label>
 
         <button
           onClick={askClaude}

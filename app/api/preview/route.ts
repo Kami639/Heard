@@ -65,8 +65,12 @@ function nameMatches(candidate: string, target: string): boolean {
 function titleMatches(a: string, b: string): boolean {
   const na = norm(a), nb = norm(b);
   if (!na || !nb) return false;
+  if (na === nb) return true;
+  // Short titles ("X", "9", "Fein") must match exactly — substring matching
+  // here is what made "X" play any track with an x in the name.
+  if (na.length <= 5 || nb.length <= 5) return false;
   if (na.includes(nb.slice(0, 14)) || nb.includes(na.slice(0, 14))) return true;
-  return na.length >= 4 && nb.length >= 4 && lev(na, nb) <= 2;
+  return lev(na, nb) <= 2;
 }
 
 const memo = new Map<string, { v: any; exp: number }>();

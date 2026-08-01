@@ -39,7 +39,8 @@ export default function ArtistPage({ params }: { params: Promise<{ name: string 
   }, []);
 
   useEffect(() => {
-    fetch(`/api/artist?name=${encodeURIComponent(name)}`)
+    const ac = new AbortController();
+    fetch(`/api/artist?name=${encodeURIComponent(name)}`, { signal: ac.signal })
       .then((r) => r.json())
       .then(({ artist }) => artist && setInfo({
         imageUrl: artist.imageUrl ?? null,
@@ -48,13 +49,16 @@ export default function ArtistPage({ params }: { params: Promise<{ name: string 
         followers: artist.followers ?? 0,
       }))
       .catch(() => {});
+    return () => ac.abort();
   }, [name]);
 
   useEffect(() => {
-    fetch(`/api/tours?artist=${encodeURIComponent(name)}`)
+    const ac = new AbortController();
+    fetch(`/api/tours?artist=${encodeURIComponent(name)}`, { signal: ac.signal })
       .then((r) => r.json())
       .then((d) => setTours(d.tours ?? []))
       .catch(() => {});
+    return () => ac.abort();
   }, [name]);
 
   const attended = concerts.filter((c) => !c.cancelled);

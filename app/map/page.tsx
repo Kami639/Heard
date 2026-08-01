@@ -72,7 +72,8 @@ export default function MapPage() {
           params.set("bounded", "1");
         }
         try {
-          const res = await fetch(`https://nominatim.openstreetmap.org/search?${params}`);
+          params.set("email", "heard-app@users.noreply.github.com"); // OSM asks for contact on automated use
+        const res = await fetch(`https://nominatim.openstreetmap.org/search?${params}`);
           const data = await res.json();
           return data?.[0] ? [Number(data[0].lat), Number(data[0].lon)] : null;
         } catch { return null; }

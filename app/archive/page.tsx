@@ -5,18 +5,13 @@ import { useRouter } from "next/navigation";
 import { ChevronRight } from "lucide-react";
 import { AppShell } from "@/components/AppShell";
 import { Art, Stars } from "@/components/Art";
+import { useConcerts } from "@/lib/useConcerts";
 import { getConcerts } from "@/lib/store";
 import { splitArtists, type ConcertRec } from "@/features/concerts/data";
 
 export default function Archive() {
   const router = useRouter();
-  const [concerts, setConcerts] = useState<ConcertRec[]>([]);
-  useEffect(() => {
-    const load = () => setConcerts(getConcerts());
-    load();
-    window.addEventListener("heard-sync", load);
-    return () => window.removeEventListener("heard-sync", load);
-  }, []);
+  const concerts = useConcerts();
 
   const byYear = new Map<number, ConcertRec[]>();
   for (const c of concerts) {

@@ -18,6 +18,7 @@ export default function Songs() {
   const [playingKey, setPlayingKey] = useState<string | null>(null);
   const [loadingKey, setLoadingKey] = useState<string | null>(null);
   const [pending, setPending] = useState(0);
+  const [, setConcertsRefresh] = useState(0);
   const [fixing, setFixing] = useState<string | null>(null);
   const [songStatus, setSongStatus] = useState<Record<string, "unreleased" | "no_preview">>({});
   const audioRef = useRef<HTMLAudioElement | null>(null);
@@ -70,8 +71,22 @@ export default function Songs() {
     setTotal(t);
     };
     load();
-    setPending(needsCredits(getConcerts()).length);
     window.addEventListener("heard-sync", load);
+
+    // Credits fix themselves in the background — no button to find.
+    (async () => {
+      const todo = needsCredits(getConcerts());
+      setPending(todo.length);
+      if (!todo.length) return;
+      const { fixConcertCredits } = await import("@/lib/credits");
+      for (let i = 0; i < todo.length; i++) {
+        setFixing(`Checking credits · show ${i + 1}/${todo.length}`);
+        try { await fixConcertCredits(todo[i]); } catch {}
+        load();
+      }
+      setFixing(null);
+      setPending(0);
+    })();
     return () => window.removeEventListener("heard-sync", load);
   }, []);
 
@@ -79,7 +94,6 @@ export default function Songs() {
     <AppShell title="songs" count={total}>
       <section className="flex flex-1 flex-col gap-1 overflow-y-auto px-6 pb-4 pt-4">
         <h1 className="text-center font-display text-[13px] font-extrabold tracking-[0.3em] text-sub">SONGS HEARD</h1>
-        <p className="pb-2 text-center font-mono text-xs text-sub">{total} songs live · {songs.length} unique</p>
         {songs.length === 0 && (
           <p className="pt-8 text-center font-mono text-xs text-sub">
             Nothing heard yet.<br />Add a concert with a setlist.

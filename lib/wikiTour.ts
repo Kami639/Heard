@@ -48,6 +48,7 @@ export interface TourGuest {
 }
 
 import { fetchRenderedHtml, parseWikiTables } from "./wikiTables";
+import { politeJson } from "./requestQueue";
 
 const cache = new Map<string, { v: TourInfo | null; exp: number }>();
 const UA = { "User-Agent": "heard-concert-archive/1.0 (https://heard-beryl.vercel.app; contact via github.com/Kami639/Heard)", "Accept": "application/json" };
@@ -271,24 +272,11 @@ function trace(step: string, detail: string) {
   if (wikiTrace.length > 12) wikiTrace.pop();
 }
 
-async function getJson(url: string, attempt = 0): Promise<any | null> {
-  try {
-    const res = await fetch(url, { headers: UA, cache: "no-store" });
-    if (!res.ok) {
-      trace("http", `${res.status} ${url.slice(0, 120)}`);
-      if ((res.status === 429 || res.status >= 500) && attempt < 1) {
-        await new Promise((r) => setTimeout(r, 600));
-        return getJson(url, attempt + 1);
-      }
-      return null;
-    }
-    const data = await res.json();
-    if (data?.error) { trace("api-error", JSON.stringify(data.error).slice(0, 160)); return null; }
-    return data;
-  } catch (e: any) {
-    trace("fetch-threw", String(e?.message ?? e).slice(0, 160));
-    return null;
-  }
+async function getJson(url: string): Promise<any | null> {
+  const data = await politeJson<any>(url, { headers: UA, ttl: 7 * 24 * 3600 * 1000 });
+  if (!data) { trace("http", `no data ${url.slice(0, 120)}`); return null; }
+  if (data?.error) { trace("api-error", JSON.stringify(data.error).slice(0, 160)); return null; }
+  return data;
 }
 
 /** Find a tour's Wikipedia article and parse it. `artist` narrows the search. */

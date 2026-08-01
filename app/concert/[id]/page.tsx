@@ -63,7 +63,8 @@ export default function Concert({ params }: { params: Promise<{ id: string }> })
     if (playingSong === song) { stopSong(); return; }
     stopSong();
     setLoadingSong(song);
-    let url = previewCache.current[song];
+    const ck = `${song}::${artist}`;
+    let url = previewCache.current[ck];
     if (url === undefined) {
       try {
         const cov = c?.covers?.[song];
@@ -76,7 +77,7 @@ export default function Concert({ params }: { params: Promise<{ id: string }> })
           if (data.status === "not_found") import("@/features/achievements").then((m) => m.unlockUnreleasedAchievement());
         }
       } catch { url = null; }
-      if (url) previewCache.current[song] = url; // failures retry next tap
+      if (url) previewCache.current[ck] = url; // failures retry next tap
     }
     setLoadingSong(null);
     if (!url) { setPlayingSong(null); return; }
@@ -584,7 +585,7 @@ export default function Concert({ params }: { params: Promise<{ id: string }> })
           </Section>
         )}
 
-        {(c.artists?.length ?? 0) > 1 && (
+        {(c.setlist.length > 0 || (c.artists?.length ?? 0) > 1) && (
           <Section
             label="LINEUP"
             action={
@@ -599,7 +600,7 @@ export default function Concert({ params }: { params: Promise<{ id: string }> })
             }
           >
             <div className="flex flex-wrap gap-2">
-              {c.artists!.map((a) => (
+              {(c.artists ?? splitArtists(c.artist).map((name) => ({ name, imageUrl: null }))).map((a) => (
                 <span key={a.name} className="flex items-center gap-1.5 rounded-full bg-card px-2.5 py-1.5 text-xs">
                   {a.imageUrl ? (
                     // eslint-disable-next-line @next/next/no-img-element
@@ -639,6 +640,31 @@ export default function Concert({ params }: { params: Promise<{ id: string }> })
                   )}
                 </span>
               ))}
+              {editingLineup && (
+                <button
+                  onClick={async () => {
+                    const name = prompt("Who else performed that night?");
+                    if (!name?.trim()) return;
+                    const list = c.artists ?? splitArtists(c.artist).map((n) => ({ name: n, imageUrl: null }));
+                    let imageUrl: string | null = null;
+                    try {
+                      const r = await fetch(`/api/artist?name=${encodeURIComponent(name.trim())}`);
+                      imageUrl = (await r.json()).artist?.imageUrl ?? null;
+                    } catch {}
+                    const artists = [...list, { name: name.trim(), imageUrl }];
+                    const names = artists.map((x) => x.name);
+                    updateConcert(c.id, {
+                      artists,
+                      artist: names.length > 4 ? `${names.slice(0, 4).join(" & ")} & more` : names.join(" & "),
+                      creditsChecked: false,
+                    });
+                    setConcerts(getConcerts());
+                  }}
+                  className="pressable rounded-full bg-card2 px-3 py-1.5 text-xs text-accent"
+                >
+                  ＋ Add artist
+                </button>
+              )}
             </div>
           </Section>
         )}
@@ -679,7 +705,7 @@ export default function Concert({ params }: { params: Promise<{ id: string }> })
             ) : (
               <li key={s}>
                 <button
-                  onClick={() => toggleSong(s, c.artist)}
+                  onClick={() => toggleSong(s, c.songArtists?.[s] ?? splitArtists(c.artist)[0] ?? c.artist)}
                   className="pressable flex w-full items-center gap-3 rounded-lg px-1 py-1 text-left text-sm"
                 >
                   <span className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-card text-[11px] ${songStatus[s] ? "text-sub" : "text-accent"}`}>

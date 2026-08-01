@@ -19,6 +19,7 @@ export interface ConcertRec {
   photosData?: string[]; // legacy compressed dataURLs
   media?: { id: string; type: "image" | "video"; url?: string | null }[];
   updatedAt?: number;
+  hlc?: string;
   info?: string | null;
   genres?: string[];
   covers?: Record<string, string>; // song -> original artist
