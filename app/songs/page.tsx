@@ -1,10 +1,11 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { AppShell } from "@/components/AppShell";
 import { claimPlayback, isCurrent, playUrl, stopAudio } from "@/lib/audio";
 import { getConcerts } from "@/lib/store";
+import { useConcerts } from "@/lib/useConcerts";
 import { splitArtists } from "@/features/concerts/data";
 import { needsCredits, fixAllCredits } from "@/lib/credits";
 import { useRef } from "react";
@@ -13,8 +14,6 @@ interface SongCount { song: string; artist: string; count: number }
 
 export default function Songs() {
   const router = useRouter();
-  const [songs, setSongs] = useState<SongCount[]>([]);
-  const [total, setTotal] = useState(0);
   const [playingKey, setPlayingKey] = useState<string | null>(null);
   const [loadingKey, setLoadingKey] = useState<string | null>(null);
   const [pending, setPending] = useState(0);
@@ -50,16 +49,16 @@ export default function Songs() {
 
   useEffect(() => () => { audioRef.current?.pause(); }, []);
 
-  useEffect(() => {
-    const load = () => {
-    const concerts = getConcerts();
+  const concerts = useConcerts();
+
+  // songs are derived state — recomputed whenever the archive changes
+  const { songs, total } = useMemo(() => {
     const map = new Map<string, SongCount>();
     let t = 0;
     for (const c of concerts) {
       if (c.cancelled) continue;
       for (const s of c.setlist) {
         t++;
-        // whoever actually performed it — not the whole night's billing
         const performer = c.songArtists?.[s] ?? splitArtists(c.artist)[0] ?? c.artist;
         const key = `${s.toLowerCase()}::${performer.toLowerCase()}`;
         const cur = map.get(key);
@@ -67,27 +66,27 @@ export default function Songs() {
         else map.set(key, { song: s, artist: performer, count: 1 });
       }
     }
-    setSongs([...map.values()].sort((a, b) => b.count - a.count));
-    setTotal(t);
+    return {
+      songs: [...map.values()].sort((a, b) => b.count - a.count),
+      total: t,
     };
-    load();
-    window.addEventListener("heard-sync", load);
+  }, [concerts]);
 
-    // Credits fix themselves in the background — no button to find.
+  useEffect(() => {
+    // credits fix themselves in the background
     (async () => {
-      const todo = needsCredits(getConcerts());
+      const todo = needsCredits(concerts);
       setPending(todo.length);
       if (!todo.length) return;
       const { fixConcertCredits } = await import("@/lib/credits");
       for (let i = 0; i < todo.length; i++) {
         setFixing(`Checking credits · show ${i + 1}/${todo.length}`);
         try { await fixConcertCredits(todo[i]); } catch {}
-        load();
       }
       setFixing(null);
       setPending(0);
     })();
-    return () => window.removeEventListener("heard-sync", load);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   return (

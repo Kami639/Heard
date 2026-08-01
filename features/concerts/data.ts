@@ -33,6 +33,7 @@ export interface ConcertRec {
   lineupChecked?: boolean;
   tourArtChecked?: boolean;
   creditsChecked?: boolean;
+  creditsVersion?: number;
   geoChecked?: boolean;
   geoApprox?: boolean;
   lat?: number | null;

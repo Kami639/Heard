@@ -27,7 +27,21 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         {children}
         <script
           dangerouslySetInnerHTML={{
-            __html: `if("serviceWorker" in navigator){window.addEventListener("load",()=>navigator.serviceWorker.register("/sw.js").catch(()=>{}))}`,
+            __html: `if("serviceWorker" in navigator){window.addEventListener("load",function(){navigator.serviceWorker.register("/sw.js").then(function(reg){
+              reg.addEventListener("updatefound",function(){
+                var sw=reg.installing;
+                if(!sw)return;
+                sw.addEventListener("statechange",function(){
+                  if(sw.state==="installed"&&navigator.serviceWorker.controller){sw.postMessage("skip-waiting");}
+                });
+              });
+              setInterval(function(){reg.update().catch(function(){});},60000);
+            }).catch(function(){});
+            var reloading=false;
+            navigator.serviceWorker.addEventListener("controllerchange",function(){
+              if(reloading)return;reloading=true;window.location.reload();
+            });
+          })}`,
           }}
         />
       </body>
