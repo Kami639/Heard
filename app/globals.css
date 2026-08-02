@@ -78,3 +78,48 @@ textarea:focus-visible {
   outline-offset: 2px;
   border-radius: 8px;
 }
+
+/* ── texture ───────────────────────────────────────────────────────────
+   A faint film grain over the whole app. Costs nothing (pure CSS, no
+   WebGL) and gives the dark UI the feel of a printed gig poster rather
+   than a spreadsheet. */
+body::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  pointer-events: none;
+  opacity: 0.035;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3'/%3E%3C/filter%3E%3Crect width='120' height='120' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+
+/* ── editorial names ───────────────────────────────────────────────────
+   Artist and tour names are the point of this app — set them like a
+   poster: tight tracking, heavy weight, big. */
+.name-xl {
+  font-weight: 800;
+  letter-spacing: -0.03em;
+  line-height: 0.95;
+  text-wrap: balance;
+}
+
+/* ── scroll-driven reveals ─────────────────────────────────────────────
+   Native CSS where supported (no JS, no jank), and simply visible where
+   it isn't. */
+@supports (animation-timeline: view()) {
+  @media (prefers-reduced-motion: no-preference) {
+    .reveal {
+      animation: reveal-in linear both;
+      animation-timeline: view();
+      animation-range: entry 0% entry 45%;
+    }
+  }
+}
+
+@keyframes reveal-in {
+  from { opacity: 0; transform: translateY(14px); }
+  to { opacity: 1; transform: none; }
+}
+
+/* springy press feedback */
+.pressable { transition: transform 140ms cubic-bezier(0.34, 1.56, 0.64, 1), opacity 120ms ease; }

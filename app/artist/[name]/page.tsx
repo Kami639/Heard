@@ -29,6 +29,7 @@ export default function ArtistPage({ params }: { params: Promise<{ name: string 
   const router = useRouter();
   const [concerts, setConcerts] = useState<ConcertRec[]>([]);
   const [tours, setTours] = useState<string[]>([]);
+  const [coverage, setCoverage] = useState<any | null>(null);
   const [info, setInfo] = useState<{ imageUrl: string | null; genres: string[]; popularity: number; followers: number } | null>(null);
 
   useEffect(() => {
@@ -107,6 +108,21 @@ export default function ArtistPage({ params }: { params: Promise<{ name: string 
           <LcdStat label="Songs heard" value={songsHeard} />
           <LcdStat label="First seen" value={firstYear ?? "—"} />
         </div>
+
+        {coverage && coverage.catalogue > 0 && (
+          <div className="rounded-2xl bg-card p-4">
+            <div className="flex items-baseline justify-between">
+              <p className="text-[13px] font-semibold">Their catalogue, live</p>
+              <p className="font-display text-xl font-extrabold text-accent">{coverage.percent}%</p>
+            </div>
+            <div className="mt-2 h-2 overflow-hidden rounded-full bg-card2">
+              <div className="h-full rounded-full bg-accent transition-all duration-700" style={{ width: `${coverage.percent}%` }} />
+            </div>
+            <p className="pt-1.5 text-[11px] text-sub">
+              You&apos;ve heard {coverage.heard} of their {coverage.catalogue} known songs performed live.
+            </p>
+          </div>
+        )}
 
         {tours.length > 0 && (
           <div>

@@ -78,7 +78,7 @@ export default function Gallery() {
                 <button
                   key={s.key}
                   onClick={() => setOpen(s)}
-                  className="pressable relative aspect-square overflow-hidden rounded-lg bg-card"
+                  className="reveal pressable relative aspect-square overflow-hidden rounded-lg bg-card"
                 >
                   {s.type === "video" ? (
                     <>

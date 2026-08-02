@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { ChevronRight, Music2, Disc3, Trophy, Images } from "lucide-react";
+import { ChevronRight, Music2, Disc3, Trophy, Images, ListOrdered } from "lucide-react";
 import { AppShell } from "@/components/AppShell";
 import { Art, Stars } from "@/components/Art";
 import { LcdStat } from "@/components/lcd/LcdStat";
@@ -120,6 +120,7 @@ export default function Home() {
             { label: "Wrapped", href: "/wrapped", icon: Disc3 },
             { label: "Achievements", href: "/achievements", icon: Trophy },
             { label: "Gallery", href: "/gallery", icon: Images },
+            { label: "Lists", href: "/lists", icon: ListOrdered },
           ].map(({ label, href, icon: Icon }, i, arr) => (
             <button
               key={href}

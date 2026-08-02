@@ -8,6 +8,8 @@ import { Art, Stars } from "@/components/Art";
 import { getConcerts, updateConcert, deleteConcert, daysUntil } from "@/lib/store";
 import { splitArtists } from "@/features/concerts/data";
 import { MOMENTS } from "@/lib/moments";
+import { beginRanking, answer, rankOf, type RankSession } from "@/lib/ranking";
+import { getLists, createList, toggleInList } from "@/lib/lists";
 import { saveMedia, getMedia, deleteMedia } from "@/lib/media";
 import { downloadShareCard } from "@/lib/shareCard";
 import { useRef } from "react";
@@ -51,6 +53,8 @@ export default function Concert({ params }: { params: Promise<{ id: string }> })
   const [editingSetlist, setEditingSetlist] = useState(false);
   const [editingLineup, setEditingLineup] = useState(false);
   const [fixing, setFixing] = useState<string | null>(null);
+  const [weather, setWeather] = useState<any | null>(null);
+  const [rank, setRank] = useState<{ session: RankSession; against: string | null } | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const previewCache = useRef<Record<string, string | null>>({});
 
@@ -109,6 +113,16 @@ export default function Concert({ params }: { params: Promise<{ id: string }> })
   const fileRef = useRef<HTMLInputElement>(null);
 
   const cRef = concerts.find((x) => x.id === id);
+
+  useEffect(() => {
+    if (!cRef || cRef.lat == null || cRef.lng == null) return;
+    const iso = new Date(cRef.dateDisplay);
+    if (isNaN(+iso)) return;
+    fetch(`/api/weather?lat=${cRef.lat}&lng=${cRef.lng}&date=${iso.toISOString().slice(0, 10)}`)
+      .then((r) => r.json())
+      .then((d) => d.weather && setWeather(d.weather))
+      .catch(() => {});
+  }, [cRef?.id, cRef?.lat]);
 
   useEffect(() => {
     if (!cRef?.tour) return;
@@ -433,12 +447,17 @@ export default function Concert({ params }: { params: Promise<{ id: string }> })
           <div className="text-center">
             <button
               onClick={() => router.push(`/artist/${encodeURIComponent(splitArtists(c.artist)[0] ?? c.artist)}`)}
-              className="pressable max-w-full break-words px-2 font-display font-extrabold leading-tight"
+              className="pressable name-xl max-w-full break-words px-2 font-display"
               style={{ fontSize: `clamp(19px, ${Math.max(19, 34 - Math.max(0, c.artist.length - 12))}px, 28px)` }}
             >
               {c.artist}
             </button>
-            {lineupMsg && <p className="px-4 pt-1 text-xs text-accent">✓ {lineupMsg}</p>}
+            {weather && (
+            <p className="px-4 pt-1 text-xs text-sub">
+              {weather.icon} {weather.high}° / {weather.low}° · {weather.label} that night
+            </p>
+          )}
+          {lineupMsg && <p className="px-4 pt-1 text-xs text-accent">✓ {lineupMsg}</p>}
           {c.openers?.length ? (
               <p className="px-4 pt-1 text-xs text-sub">Opened by {c.openers.join(", ")}</p>
             ) : null}
@@ -712,6 +731,70 @@ export default function Concert({ params }: { params: Promise<{ id: string }> })
             </div>
           </Section>
         )}
+
+        <Section label="WHERE IT RANKS">
+          {(() => {
+            const place = rankOf(c.id);
+            const other = rank?.against ? concerts.find((x) => x.id === rank.against) : null;
+            if (rank && other) {
+              return (
+                <div className="rounded-2xl bg-card p-4 text-center">
+                  <p className="text-xs text-sub">Which night was better?</p>
+                  <div className="flex flex-col gap-2 pt-3">
+                    <button
+                      onClick={() => setRank(answer(rank.session, true))}
+                      className="pressable rounded-xl bg-accent py-3 text-sm font-bold text-black"
+                    >
+                      {c.artist}
+                    </button>
+                    <button
+                      onClick={() => setRank(answer(rank.session, false))}
+                      className="pressable rounded-xl bg-card2 py-3 text-sm font-semibold"
+                    >
+                      {other.artist} <span className="text-sub">· {other.dateDisplay}</span>
+                    </button>
+                  </div>
+                </div>
+              );
+            }
+            return (
+              <div className="flex items-center gap-2">
+                {place && (
+                  <button
+                    onClick={() => router.push("/ranked")}
+                    className="pressable rounded-full bg-accent/15 px-3 py-1.5 text-xs font-semibold text-accent"
+                  >
+                    #{place} of your shows
+                  </button>
+                )}
+                <button
+                  onClick={() => setRank(beginRanking(c.id))}
+                  className="pressable rounded-full bg-card px-3 py-1.5 text-xs text-accent"
+                >
+                  {place ? "Re-rank" : "Rank this show"}
+                </button>
+                <button
+                  onClick={() => {
+                    const lists = getLists();
+                    const name = prompt(
+                      lists.length
+                        ? `Add to which list?\n${lists.map((l, i) => `${i + 1}. ${l.name}`).join("\n")}\n\nType a number, or a new list name:`
+                        : "Name your first list",
+                      lists.length ? "1" : "Best encores I've seen"
+                    );
+                    if (!name?.trim()) return;
+                    const idx = Number(name);
+                    const target = Number.isFinite(idx) && lists[idx - 1] ? lists[idx - 1] : createList(name);
+                    toggleInList(target.id, c.id);
+                  }}
+                  className="pressable rounded-full bg-card px-3 py-1.5 text-xs text-accent"
+                >
+                  ＋ Add to list
+                </button>
+              </div>
+            );
+          })()}
+        </Section>
 
         <Section label="THAT NIGHT">
           <p className="pb-2 text-[11px] text-sub">
