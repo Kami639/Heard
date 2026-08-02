@@ -11,7 +11,9 @@ import { MOMENTS } from "@/lib/moments";
 import { beginRanking, answer, rankOf, type RankSession } from "@/lib/ranking";
 import { getLists, createList, toggleInList } from "@/lib/lists";
 import { saveMedia, getMedia, deleteMedia } from "@/lib/media";
-import { downloadShareCard } from "@/lib/shareCard";
+import { downloadShareCard, downloadGigPoster, downloadTicketStub } from "@/lib/shareCard";
+import { whoWasThere } from "@/lib/social";
+import { musicKitEnabled, playFullSong, stopFullSong } from "@/lib/musickit";
 import { useRef } from "react";
 import type { ConcertRec } from "@/features/concerts/data";
 
@@ -57,6 +59,9 @@ export default function Concert({ params }: { params: Promise<{ id: string }> })
   const [rank, setRank] = useState<{ session: RankSession; against: string | null } | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const previewCache = useRef<Record<string, string | null>>({});
+  const [songRarity, setSongRarity] = useState<{ totalShows: number; counts: Record<string, number> } | null>(null);
+  const [others, setOthers] = useState<{ code: string; name: string; shows: number }[]>([]);
+  const [fullMode, setFullMode] = useState(false);
 
   const stopSong = () => {
     audioRef.current?.pause();
@@ -65,8 +70,15 @@ export default function Concert({ params }: { params: Promise<{ id: string }> })
   };
 
   async function toggleSong(song: string, artist: string) {
-    if (playingSong === song) { stopSong(); return; }
+    if (playingSong === song) { stopSong(); stopFullSong(); return; }
     stopSong();
+    if (fullMode) {
+      // Apple Music full playback; quietly falls back to the 30s preview
+      setLoadingSong(song);
+      const ok = await playFullSong(artist, song);
+      setLoadingSong(null);
+      if (ok) { setPlayingSong(song); return; }
+    }
     setLoadingSong(song);
     const ck = `${song}::${artist}`;
     let url = previewCache.current[ck];
@@ -109,6 +121,34 @@ export default function Concert({ params }: { params: Promise<{ id: string }> })
     window.addEventListener("heard-sync", load);
     return () => window.removeEventListener("heard-sync", load);
   }, []);
+
+  // Song rarity across the tour ("only played 3 of 41 nights"), cached per tour.
+  useEffect(() => {
+    const cRec = getConcerts().find((x) => x.id === id);
+    if (!cRec?.tour || cRec.setlist.length === 0) return;
+    const key = `heard.songrarity.v1.${cRec.artist.toLowerCase()}|${cRec.tour.toLowerCase()}`;
+    try {
+      const hit = JSON.parse(localStorage.getItem(key) ?? "null");
+      if (hit && Date.now() - hit.at < 7 * 86400000) { setSongRarity(hit.data); return; }
+    } catch {}
+    const ac = new AbortController();
+    fetch(`/api/song-rarity?artist=${encodeURIComponent(cRec.artist)}&tour=${encodeURIComponent(cRec.tour)}`, { signal: ac.signal })
+      .then((r) => r.json())
+      .then((data) => {
+        if (!data?.totalShows) return;
+        setSongRarity(data);
+        try { localStorage.setItem(key, JSON.stringify({ at: Date.now(), data })); } catch {}
+      })
+      .catch(() => {});
+    return () => ac.abort();
+  }, [id]);
+
+  // Who else (with a public profile) was in the room that night.
+  useEffect(() => {
+    const cRec = getConcerts().find((x) => x.id === id);
+    if (!cRec || cRec.cancelled) return;
+    whoWasThere(cRec.artist, cRec.dateDisplay).then(setOthers).catch(() => {});
+  }, [id]);
 
   const fileRef = useRef<HTMLInputElement>(null);
 
@@ -443,7 +483,7 @@ export default function Concert({ params }: { params: Promise<{ id: string }> })
           ‹ Archive
         </button>
         <div className={`flex flex-col items-center gap-3 px-6 pt-2 ${c.cancelled ? "opacity-60" : ""}`}>
-          <div className="w-full max-w-64"><Art c1={c.c1} c2={c.c2} initials={c.initials} imageUrl={c.imageUrl} artists={c.artists} /></div>
+          <div className="w-full max-w-64" style={{ viewTransitionName: "concert-hero" }}><Art c1={c.c1} c2={c.c2} initials={c.initials} imageUrl={c.imageUrl} artists={c.artists} /></div>
           <div className="text-center">
             <button
               onClick={() => router.push(`/artist/${encodeURIComponent(splitArtists(c.artist)[0] ?? c.artist)}`)}
@@ -827,12 +867,23 @@ export default function Concert({ params }: { params: Promise<{ id: string }> })
           label="SETLIST"
           action={
             c.setlist.length > 0 ? (
-              <button
-                onClick={() => setEditingSetlist((v) => !v)}
-                className="pressable text-[11px] text-accent"
-              >
-                {editingSetlist ? "Done" : "Edit"}
-              </button>
+              <span className="flex items-center gap-3">
+                {musicKitEnabled() && (
+                  <button
+                    onClick={() => { setFullMode((v) => !v); stopSong(); stopFullSong(); }}
+                    className={`pressable text-[11px] ${fullMode ? "font-semibold text-accent" : "text-sub"}`}
+                    title="Play full songs via Apple Music"
+                  >
+                    {fullMode ? "♫ Full songs" : "♫ Previews"}
+                  </button>
+                )}
+                <button
+                  onClick={() => setEditingSetlist((v) => !v)}
+                  className="pressable text-[11px] text-accent"
+                >
+                  {editingSetlist ? "Done" : "Edit"}
+                </button>
+              </span>
             ) : null
           }
         >
@@ -917,6 +968,20 @@ export default function Concert({ params }: { params: Promise<{ id: string }> })
                       </span>
                     );
                   })()}
+                  {(() => {
+                    if (!songRarity || songRarity.totalShows < 8) return null;
+                    const nk = (x: string) => x.toLowerCase().replace(/[^a-z0-9]/g, "");
+                    const n = songRarity.counts[nk(s)];
+                    if (n == null || n > Math.max(3, songRarity.totalShows * 0.12)) return null;
+                    return (
+                      <span
+                        title={`Played at ${n} of ${songRarity.totalShows} logged shows on this tour`}
+                        className="shrink-0 rounded-full bg-accent/15 px-2 py-0.5 text-[10px] font-semibold text-accent"
+                      >
+                        🦄 {n} of {songRarity.totalShows} nights
+                      </span>
+                    );
+                  })()}
                   {songCover[s] && (
                     <span className="max-w-[110px] shrink-0 truncate rounded-full bg-card px-2 py-0.5 text-[10px] text-sub">♫ {songCover[s]}</span>
                   )}
@@ -945,7 +1010,7 @@ export default function Concert({ params }: { params: Promise<{ id: string }> })
               </li>
             ))}
           </ol>
-          <div className="mt-2 font-mono text-[10px] text-sub">Setlist via setlist.fm · Previews via iTunes</div>
+          <div className="mt-2 font-mono text-[10px] text-sub">Setlist via setlist.fm · Previews via iTunes{musicKitEnabled() ? " · Full songs via Apple Music" : ""}</div>
         </Section>
 
         <Section label={`MEMORIES (${(c.media?.length ?? 0) + (c.photosData?.length ?? 0)})`}>
@@ -1082,13 +1147,41 @@ export default function Concert({ params }: { params: Promise<{ id: string }> })
           </div>
         </Section>
 
-        <div className="flex justify-center px-6 pt-5">
-          <button
-            onClick={() => downloadShareCard(c)}
-            className="pressable rounded-full border border-hairline bg-card px-6 py-2.5 font-mono text-xs tracking-[0.15em]"
-          >
-            ⤓ SHARE CARD
-          </button>
+        {others.length > 0 && (
+          <Section label="IN THE ROOM">
+            <p className="mb-2 text-xs text-sub">
+              {others.length === 1 ? "Someone else" : `${others.length} others`} with a public
+              archive {others.length === 1 ? "was" : "were"} at this show.
+            </p>
+            <div className="flex flex-col gap-1.5">
+              {others.map((o) => (
+                <button
+                  key={o.code}
+                  onClick={() => router.push(`/u/${o.code}`)}
+                  className="pressable flex items-center justify-between rounded-xl bg-card px-3 py-2.5 text-left"
+                >
+                  <span className="text-sm font-semibold">{o.name}</span>
+                  <span className="font-mono text-[11px] text-sub">{o.shows} shows · view ▸</span>
+                </button>
+              ))}
+            </div>
+          </Section>
+        )}
+
+        <div className="flex flex-wrap justify-center gap-2 px-6 pt-5">
+          {([
+            ["⤓ CARD", () => downloadShareCard(c)],
+            ["⤓ POSTER", () => downloadGigPoster(c)],
+            ["⤓ STUB", () => downloadTicketStub(c)],
+          ] as [string, () => void][]).map(([label, fn]) => (
+            <button
+              key={label}
+              onClick={fn}
+              className="pressable rounded-full border border-hairline bg-card px-5 py-2.5 font-mono text-xs tracking-[0.15em]"
+            >
+              {label}
+            </button>
+          ))}
         </div>
         <div className="flex justify-center px-6 pt-3">
           <button onClick={del} className="font-mono text-[11px] tracking-[0.15em] text-sub underline underline-offset-4">

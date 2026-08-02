@@ -60,6 +60,7 @@ export async function publishProfile(displayName: string): Promise<string | null
     code,
     user_id: session.user.id,
     data: payload,
+    show_keys: cs.map((c) => showKey(c.artist, c.dateDisplay)),
     updated_at: new Date().toISOString(),
   });
   if (error) return null;
@@ -107,4 +108,38 @@ export function overlap(theirs: PublicProfile, mine = getConcerts().filter((c) =
     sameShows: mine.filter((c) => theirShows.has(`${nk(c.artist)}|${c.dateDisplay}`)),
     sharedArtists: [...new Set(mine.flatMap((c) => splitArtists(c.artist)))].filter((a) => theirArtists.has(nk(a))),
   };
+}
+
+/* ── who else was in the room ─────────────────────────────────────────
+ * Shared archives carry normalized "artist|date" keys, so a single indexed
+ * containment query answers: which public profiles were at THIS show?
+ * Only people who chose to publish appear — nobody is discoverable by
+ * default. */
+
+export function showKey(artist: string, dateDisplay: string): string {
+  const nk = (x: string) => x.toLowerCase().replace(/[^a-z0-9]/g, "");
+  const d = new Date(dateDisplay);
+  const iso = isNaN(+d) ? nk(dateDisplay) : d.toISOString().slice(0, 10);
+  return `${nk(artist)}|${iso}`;
+}
+
+export async function whoWasThere(artist: string, dateDisplay: string):
+  Promise<{ code: string; name: string; shows: number }[]> {
+  const sb = getSupabase();
+  if (!sb) return [];
+  const key = showKey(artist, dateDisplay);
+  const { data, error } = await sb
+    .from("shared_archives")
+    .select("code, data")
+    .contains("show_keys", JSON.stringify([key]))
+    .limit(20);
+  if (error || !data) return [];
+  const mine = myCode();
+  return data
+    .filter((r) => r.code !== mine)
+    .map((r) => ({
+      code: r.code,
+      name: (r.data as PublicProfile)?.name ?? "A concert head",
+      shows: (r.data as PublicProfile)?.shows ?? 0,
+    }));
 }

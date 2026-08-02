@@ -12,6 +12,10 @@ export default function MapPage() {
   const ref = useRef<HTMLDivElement>(null);
   const [concerts, setConcerts] = useState<ConcertRec[]>([]);
   const [locating, setLocating] = useState(false);
+  const mapRef = useRef<any>(null);
+  const LRef = useRef<any>(null);
+  const journeyRef = useRef<{ stop: boolean; layers: any[] }>({ stop: false, layers: [] });
+  const [journey, setJourney] = useState<{ playing: boolean; label: string | null }>({ playing: false, label: null });
 
   useEffect(() => {
     let map: any;
@@ -25,6 +29,7 @@ export default function MapPage() {
       if (!ref.current || (ref.current as any)._map) return;
       map = L.map(ref.current, { zoomControl: false, worldCopyJump: true });
       (ref.current as any)._map = map;
+      mapRef.current = map; LRef.current = L;
       L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png", {
         attribution: "&copy; OpenStreetMap &copy; CARTO",
         subdomains: "abcd", maxZoom: 19,
@@ -130,9 +135,57 @@ export default function MapPage() {
 
     return () => {
       cancelled = true;
+      journeyRef.current.stop = true; // halt a journey mid-flight
+      mapRef.current = null;
       if (map) { map.remove(); if (ref.current) (ref.current as any)._map = null; }
     };
   }, []);
+
+  /* ── the journey ────────────────────────────────────────────────────
+   * Flies through every located show in date order, unspooling an amber
+   * line behind it — your live-music life as one continuous trip. */
+  function stopJourney() {
+    journeyRef.current.stop = true;
+    for (const l of journeyRef.current.layers) { try { mapRef.current?.removeLayer(l); } catch {} }
+    journeyRef.current.layers = [];
+    setJourney({ playing: false, label: null });
+    const all = getConcerts().filter((c) => c.lat != null && !c.cancelled);
+    if (all.length && mapRef.current) {
+      mapRef.current.fitBounds(all.map((c) => [c.lat!, c.lng!]), { padding: [40, 40], maxZoom: 6 });
+    }
+  }
+
+  async function playJourney() {
+    const map = mapRef.current, L = LRef.current;
+    if (!map || !L) return;
+    const stops = getConcerts()
+      .filter((c) => c.lat != null && c.lng != null && !c.cancelled)
+      .map((c) => ({ c, t: +new Date(c.dateDisplay) }))
+      .filter((x) => !isNaN(x.t) && x.t <= Date.now())
+      .sort((a, b) => a.t - b.t)
+      .map((x) => x.c);
+    if (stops.length < 2) return;
+
+    journeyRef.current = { stop: false, layers: [] };
+    setJourney({ playing: true, label: null });
+    const reduced = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+    const line = L.polyline([], { color: "#FF9F0A", weight: 2.5, opacity: 0.8, dashArray: "1 6" }).addTo(map);
+    journeyRef.current.layers.push(line);
+
+    for (let i = 0; i < stops.length; i++) {
+      if (journeyRef.current.stop || !mapRef.current) return;
+      const c = stops[i];
+      const pt: [number, number] = [c.lat!, c.lng!];
+      line.addLatLng(pt);
+      const halo = L.circleMarker(pt, { radius: 9, color: "#FF9F0A", weight: 2, fillColor: "#FF9F0A", fillOpacity: 0.35 }).addTo(map);
+      journeyRef.current.layers.push(halo);
+      setJourney({ playing: true, label: `${c.year} · ${c.artist} · ${c.city}` });
+      if (reduced) map.setView(pt, Math.max(map.getZoom(), 5));
+      else map.flyTo(pt, Math.max(4.5, Math.min(8, map.getZoom() ?? 5)), { duration: 1.1 });
+      await new Promise((r) => setTimeout(r, reduced ? 500 : 1400));
+    }
+    setJourney((j) => ({ ...j, playing: false }));
+  }
 
   const cities = new Set(concerts.map((c) => c.city)).size;
   const venues = new Set(concerts.map((c) => c.venue)).size;
@@ -143,6 +196,19 @@ export default function MapPage() {
       <section className="flex flex-1 flex-col gap-3 px-5 pb-6 pt-2">
         <div ref={ref} className="h-80 w-full overflow-hidden rounded-2xl bg-card" />
         {locating && <p className="text-center text-xs text-sub">Locating venues…</p>}
+        <div className="flex items-center justify-between">
+          <button
+            onClick={journey.playing ? stopJourney : playJourney}
+            className={`pressable rounded-full px-5 py-2 font-mono text-xs tracking-[0.15em] ${
+              journey.playing ? "bg-card text-sub" : "bg-accent font-semibold text-black"
+            }`}
+          >
+            {journey.playing ? "■ STOP" : "▶ PLAY JOURNEY"}
+          </button>
+          {journey.label && (
+            <span className="fade-up min-w-0 truncate pl-3 text-right font-mono text-[11px] text-accent">{journey.label}</span>
+          )}
+        </div>
         <div className="grid grid-cols-3 gap-3">
           <LcdStat label="Shows" value={uniqueShowCount(concerts)} />
           <LcdStat label="Cities" value={cities} />

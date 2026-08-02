@@ -1,12 +1,13 @@
 "use client";
 
 import { usePathname, useRouter } from "next/navigation";
-import { Home, LibraryBig, Music2, Map, Disc3, User, Plus, Trophy, Images, ListOrdered } from "lucide-react";
+import { Home, LibraryBig, Music2, Map, Disc3, User, Plus, Trophy, Images, ListOrdered, BarChart3 } from "lucide-react";
 
 const ITEMS = [
   { href: "/", icon: Home, label: "Home" },
   { href: "/archive", icon: LibraryBig, label: "Archive" },
   { href: "/songs", icon: Music2, label: "Songs Heard" },
+  { href: "/stats", icon: BarChart3, label: "Stats" },
   { href: "/map", icon: Map, label: "Map" },
   { href: "/wrapped", icon: Disc3, label: "Wrapped" },
   { href: "/gallery", icon: Images, label: "Gallery" },
@@ -33,6 +34,7 @@ export function Sidebar() {
             <button
               key={href}
               onClick={() => router.push(href)}
+              aria-current={active ? "page" : undefined}
               className={`pressable flex items-center gap-3 rounded-lg px-3 py-2 text-left text-sm ${
                 active ? "bg-accent/15 font-medium text-accent" : "text-ink hover:bg-card"
               }`}

@@ -35,6 +35,8 @@ export function TabBar() {
             <button
               key={href}
               onClick={() => router.push(href)}
+              aria-label={label}
+              aria-current={active ? "page" : undefined}
               className={`pressable flex flex-col items-center gap-0.5 px-3 py-1 ${active ? "text-accent" : "text-sub"}`}
             >
               <Icon size={24} strokeWidth={active ? 2.4 : 2} />

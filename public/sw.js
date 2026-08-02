@@ -47,3 +47,33 @@ self.addEventListener("fetch", (e) => {
     )
   );
 });
+
+/* ── Web Push ──────────────────────────────────────────────────────────
+   Anniversary + reminder notifications. Payload: { title, body, url }. */
+self.addEventListener("push", (e) => {
+  let data = {};
+  try { data = e.data ? e.data.json() : {}; } catch {}
+  const title = data.title || "heard";
+  e.waitUntil(
+    self.registration.showNotification(title, {
+      body: data.body || "",
+      icon: "/icons/icon-192.png",
+      badge: "/icons/icon-192.png",
+      data: { url: data.url || "/" },
+      tag: data.tag || undefined,
+    })
+  );
+});
+
+self.addEventListener("notificationclick", (e) => {
+  e.notification.close();
+  const url = e.notification.data?.url || "/";
+  e.waitUntil(
+    self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((tabs) => {
+      for (const tab of tabs) {
+        if ("focus" in tab) { tab.navigate(url); return tab.focus(); }
+      }
+      return self.clients.openWindow(url);
+    })
+  );
+});

@@ -7,6 +7,7 @@ import { getConcerts, deleteConcert } from "@/lib/store";
 import { deleteMedia } from "@/lib/media";
 import { getSupabase } from "@/lib/supabase";
 import { publishProfile, unpublishProfile, myCode, friends, removeFriend, fetchProfile, addFriend } from "@/lib/social";
+import { NotifyCard, ScrobbleCard } from "@/components/settings/NotifyCard";
 import { useRouter } from "next/navigation";
 import { uniqueShowCount, type ConcertRec } from "@/features/concerts/data";
 
@@ -429,6 +430,9 @@ export default function Profile() {
             className="mt-3 w-full rounded-lg bg-card2 px-3 py-2 text-[15px] text-ink outline-none"
           />
         </div>
+
+        <NotifyCard />
+        <ScrobbleCard />
 
         <div className="rounded-2xl bg-card p-4">
           <p className="text-[15px] font-semibold">Share your archive</p>

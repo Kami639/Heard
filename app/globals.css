@@ -123,3 +123,55 @@ body::after {
 
 /* springy press feedback */
 .pressable { transition: transform 140ms cubic-bezier(0.34, 1.56, 0.64, 1), opacity 120ms ease; }
+
+/* ── view transitions ──────────────────────────────────────────────────
+   List row art morphs into the detail hero. Kept quick and springless so
+   it reads as continuity, not spectacle. Reduced-motion users get cuts. */
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation-duration: 0.22s;
+}
+::view-transition-group(concert-hero) {
+  animation-duration: 0.3s;
+  animation-timing-function: cubic-bezier(0.22, 1, 0.36, 1);
+}
+@media (prefers-reduced-motion: reduce) {
+  ::view-transition-group(*),
+  ::view-transition-old(*),
+  ::view-transition-new(*) {
+    animation: none !important;
+  }
+}
+
+/* ── accessibility ─────────────────────────────────────────────────────
+   Dynamic Type: `-apple-system-body` makes 1rem track the user's iOS text
+   size, so every rem-based Tailwind size scales with their setting.
+   Non-Apple browsers ignore it and fall through to the plain family. */
+html {
+  font: -apple-system-body;
+  font-family: var(--font-body);
+  -webkit-text-size-adjust: 100%;
+}
+
+/* Users who ask for more contrast get brighter secondary text and real
+   hairlines instead of near-black-on-black. */
+@media (prefers-contrast: more) {
+  :root {
+    --color-sub: #b8b8bd;
+    --color-hairline: #48484d;
+  }
+  body::after { opacity: 0; } /* drop the grain — it's noise, literally */
+}
+
+/* ── accessibility ─────────────────────────────────────────────────────
+   Dynamic Type: `-apple-system-body` makes 1rem track the user's iOS
+   text-size setting, so the whole app scales with their preference.
+   The font-family shorthand it sets is immediately overridden below —
+   only the size sticks. Elsewhere it's a no-op. */
+html { font: -apple-system-body; }
+html { font-family: var(--font-body); }
+
+/* Higher-contrast secondary text on request */
+@media (prefers-contrast: more) {
+  :root { --color-sub: #b8b8bf; }
+}

@@ -1,15 +1,17 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { Share } from "lucide-react";
 import { AppShell } from "@/components/AppShell";
 import { useConcerts } from "@/lib/useConcerts";
-import { getConcerts } from "@/lib/store";
 import { ACHIEVEMENTS, tally, describe } from "@/features/achievements";
 import { splitArtists } from "@/features/concerts/data";
-import type { ConcertRec } from "@/features/concerts/data";
+import { useRarity, TIER_STYLE } from "@/lib/rarity";
+import { downloadBadgeCard } from "@/lib/shareCard";
 
 export default function Achievements() {
   const concerts = useConcerts();
+  const [sort, setSort] = useState<"default" | "rarest">("default");
 
   // learn artist birthdays a few at a time (MusicBrainz allows 1 req/sec)
   useEffect(() => {
@@ -38,6 +40,16 @@ export default function Achievements() {
 
   const { unlocked, points } = tally(concerts);
   const unlockedIds = new Set(unlocked.map((a) => a.id));
+  const rarity = useRarity([...unlockedIds]);
+
+  const ordered = useMemo(() => {
+    if (sort === "default") return ACHIEVEMENTS;
+    return [...ACHIEVEMENTS].sort((a, b) => {
+      const ra = rarity.lookup(a).pct ?? 200 - a.pts; // no data: rarer if worth more
+      const rb = rarity.lookup(b).pct ?? 200 - b.pts;
+      return ra - rb;
+    });
+  }, [sort, rarity]);
 
   return (
     <AppShell title="achievements" count={concerts.length}>
@@ -53,16 +65,55 @@ export default function Achievements() {
             style={{ width: `${(unlocked.length / ACHIEVEMENTS.length) * 100}%` }}
           />
         </div>
+
+        <div className="flex items-center justify-between px-1">
+          <p className="text-[11px] text-sub">
+            {rarity.total >= 3
+              ? `Rarity across ${rarity.total} concert heads`
+              : "Rarity tiers are estimates until more people sync"}
+          </p>
+          <div className="flex gap-1">
+            {(["default", "rarest"] as const).map((s) => (
+              <button
+                key={s}
+                onClick={() => setSort(s)}
+                className={`pressable rounded-full px-3 py-1 font-mono text-[10px] ${
+                  sort === s ? "bg-accent font-semibold text-black" : "bg-card text-sub"
+                }`}
+              >
+                {s === "default" ? "ALL" : "RAREST"}
+              </button>
+            ))}
+          </div>
+        </div>
+
         <div className="grid grid-cols-2 gap-3">
-          {ACHIEVEMENTS.map((a) => {
+          {ordered.map((a) => {
             const got = unlockedIds.has(a.id);
+            const { pct, tier } = rarity.lookup(a);
+            const style = TIER_STYLE[tier];
             return (
               <div
                 key={a.id}
-                className={`fade-up flex flex-col gap-1 rounded-2xl p-4 ${got ? "bg-card" : "bg-card/40 opacity-50"}`}
+                className={`fade-up relative flex flex-col gap-1 rounded-2xl p-4 ${got ? "bg-card" : "bg-card/40 opacity-50"}`}
               >
+                {got && (
+                  <button
+                    onClick={() =>
+                      downloadBadgeCard({
+                        icon: a.icon, name: a.name, desc: a.desc, pts: a.pts,
+                        pct, tierLabel: style.label,
+                        evidence: describe(a, concerts, true),
+                      })
+                    }
+                    aria-label={`Share ${a.name} badge`}
+                    className="pressable absolute right-3 top-3 rounded-full bg-card2 p-1.5 text-sub"
+                  >
+                    <Share size={13} />
+                  </button>
+                )}
                 <span className="text-2xl">{got ? a.icon : "🔒"}</span>
-                <span className={`text-[15px] font-semibold ${got ? "text-ink" : "text-sub"}`}>{a.name}</span>
+                <span className={`pr-6 text-[15px] font-semibold ${got ? "text-ink" : "text-sub"}`}>{a.name}</span>
                 <span className="text-xs text-sub">{a.desc}</span>
                 {(() => {
                   const line = describe(a, concerts, got);
@@ -72,7 +123,12 @@ export default function Achievements() {
                     </span>
                   ) : null;
                 })()}
-                <span className={`pt-1 text-xs font-semibold ${got ? "text-accent" : "text-sub"}`}>★ {a.pts}</span>
+                <div className="flex items-center gap-2 pt-1">
+                  <span className={`text-xs font-semibold ${got ? "text-accent" : "text-sub"}`}>★ {a.pts}</span>
+                  <span className={`rounded-full px-2 py-0.5 font-mono text-[9px] font-semibold tracking-wide ${style.cls}`}>
+                    {pct != null ? `${pct}% HAVE THIS` : style.label}
+                  </span>
+                </div>
               </div>
             );
           })}

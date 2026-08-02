@@ -7,6 +7,7 @@ import { Art, Stars } from "@/components/Art";
 import { LcdStat } from "@/components/lcd/LcdStat";
 import { getConcerts } from "@/lib/store";
 import { splitArtists, type ConcertRec } from "@/features/concerts/data";
+import { getPlays, playsFor, scrobbleSettings } from "@/lib/scrobbles";
 
 const norm = (x: string) => x.toLowerCase().replace(/[^a-z0-9]/g, "");
 
@@ -31,6 +32,12 @@ export default function ArtistPage({ params }: { params: Promise<{ name: string 
   const [tours, setTours] = useState<string[]>([]);
   const [coverage, setCoverage] = useState<any | null>(null);
   const [info, setInfo] = useState<{ imageUrl: string | null; genres: string[]; popularity: number; followers: number } | null>(null);
+  const [streams, setStreams] = useState<number | null>(null);
+
+  useEffect(() => {
+    if (!scrobbleSettings()) return;
+    getPlays().then((plays) => setStreams(playsFor(plays, name)));
+  }, [name]);
 
   useEffect(() => {
     const load = () => setConcerts(getConcerts());
@@ -77,6 +84,22 @@ export default function ArtistPage({ params }: { params: Promise<{ name: string 
   return (
     <AppShell title="artist" count={headline.length + pulledUp.length}>
       <section className="flex flex-1 flex-col gap-4 px-5 pb-6 pt-2">
+        {streams != null && (
+          <div className="fade-up flex items-center justify-between rounded-2xl border border-accent/25 bg-accent/10 px-4 py-3">
+            <div>
+              <p className="text-[13px] font-semibold">
+                Streamed {streams.toLocaleString()} times · seen {headline.length}{" "}
+                {headline.length === 1 ? "time" : "times"} live
+              </p>
+              <p className="text-[11px] text-sub">
+                {headline.length === 0
+                  ? "All those streams and never in the room — fix that."
+                  : `≈ ${Math.round(streams / Math.max(1, headline.length)).toLocaleString()} streams per night out`}
+              </p>
+            </div>
+            <span className="text-xl" aria-hidden>📊</span>
+          </div>
+        )}
         <div className="flex items-center gap-4 rounded-2xl bg-card p-4">
           {info?.imageUrl ? (
             // eslint-disable-next-line @next/next/no-img-element

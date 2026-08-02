@@ -2,7 +2,8 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { ChevronRight, Music2, Disc3, Trophy, Images, ListOrdered } from "lucide-react";
+import { ChevronRight, Music2, Disc3, Trophy, Images, ListOrdered, BarChart3 } from "lucide-react";
+import { Onboarding, BackfillNudge } from "@/components/Onboarding";
 import { AppShell } from "@/components/AppShell";
 import { Art, Stars } from "@/components/Art";
 import { LcdStat } from "@/components/lcd/LcdStat";
@@ -41,6 +42,7 @@ export default function Home() {
 
   return (
     <AppShell count={concerts.length}>
+      <Onboarding concertCount={concerts.length} />
       <section className="flex flex-1 flex-col gap-4 px-5 pb-6 pt-2">
         {latest ? (
           <button
@@ -72,6 +74,8 @@ export default function Home() {
             <span className="text-sm text-sub">Add your first concert</span>
           </button>
         )}
+
+        <BackfillNudge concertCount={concerts.length} />
 
         {upcoming.length > 0 && (
           <div className="fade-up">
@@ -117,6 +121,7 @@ export default function Home() {
         <div className="overflow-hidden rounded-2xl bg-card">
           {[
             { label: "Songs Heard", href: "/songs", icon: Music2 },
+            { label: "Stats", href: "/stats", icon: BarChart3 },
             { label: "Wrapped", href: "/wrapped", icon: Disc3 },
             { label: "Achievements", href: "/achievements", icon: Trophy },
             { label: "Gallery", href: "/gallery", icon: Images },
