@@ -594,3 +594,62 @@ export async function downloadPassportCard(stamps: {
   grain(x, W, H, 0.05);
   await deliver(canvas, `heard-passport.png`);
 }
+
+/* ---------- Heardies ballot ---------- */
+
+export async function downloadHeardiesCard(
+  yearLabel: string,
+  winners: { icon: string; label: string; winner: string }[],
+) {
+  const W = 1080, H = 1920;
+  const canvas = document.createElement("canvas");
+  canvas.width = W; canvas.height = H;
+  const x = canvas.getContext("2d")!;
+  await (document as any).fonts?.ready;
+
+  // stage: black, gold wash, spotlight cones
+  x.fillStyle = "#080705"; x.fillRect(0, 0, W, H);
+  for (const sx of [W * 0.2, W * 0.8]) {
+    const g = x.createLinearGradient(sx, 0, sx + (sx < W / 2 ? 300 : -300), 900);
+    g.addColorStop(0, "#ffd77a14"); g.addColorStop(1, "transparent");
+    x.fillStyle = g;
+    x.beginPath(); x.moveTo(sx, 0); x.lineTo(sx + (sx < W / 2 ? 420 : -420), 980); x.lineTo(sx + (sx < W / 2 ? 120 : -120), 980); x.closePath(); x.fill();
+  }
+
+  x.textAlign = "center";
+  x.fillStyle = "#FF9F0A"; x.font = `700 44px ${SF}`;
+  x.fillText("heard presents", W / 2, 150);
+  x.fillStyle = "#f5d78a"; x.font = `800 96px ${SF}`;
+  x.fillText("THE HEARDIES", W / 2, 270);
+  x.fillStyle = "#8E8E93"; x.font = `600 34px ${MONO}`;
+  x.fillText(`${yearLabel} EDITION`, W / 2, 330);
+  x.strokeStyle = "#3a3320"; x.lineWidth = 2;
+  x.beginPath(); x.moveTo(150, 380); x.lineTo(W - 150, 380); x.stroke();
+
+  const rows = winners.slice(0, 8);
+  const rowH = Math.min(160, (H - 560) / rows.length);
+  rows.forEach((w, i) => {
+    const y = 470 + i * rowH;
+    x.textAlign = "left";
+    x.font = `54px ${SF}`;
+    x.fillText(w.icon, 110, y + 18);
+    x.fillStyle = "#8E8E93"; x.font = `600 24px ${MONO}`;
+    x.fillText(w.label.toUpperCase(), 200, y - 26);
+    x.fillStyle = "#FFF";
+    const ws = fitText(x, w.winner, W - 320, 46, SF, 800);
+    x.font = `800 ${ws}px ${SF}`;
+    x.fillText(w.winner, 200, y + 24);
+    x.textAlign = "right";
+    x.fillStyle = "#f5d78a"; x.font = `400 34px ${SF}`;
+    x.fillText("🏆", W - 110, y + 14);
+    x.textAlign = "center";
+  });
+
+  x.fillStyle = "#8E8E93"; x.font = `400 28px ${MONO}`;
+  x.fillText("voted on by absolutely nobody but me", W / 2, H - 130);
+  x.fillStyle = "#FF9F0A"; x.font = `600 30px ${MONO}`;
+  x.fillText("my archive · heard", W / 2, H - 80);
+
+  grain(x, W, H, 0.05);
+  await deliver(canvas, `heard-heardies-${yearLabel.toLowerCase().replace(/\W+/g, "-")}.png`);
+}

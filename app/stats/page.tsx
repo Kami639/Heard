@@ -78,7 +78,12 @@ export default function Stats() {
       .map(([city, v]) => ({ city, ...v }))
       .sort((a, b) => b.shows - a.shows);
 
-    return { busiest, longestGap, topVenue, avg, spent, songs, topDow: topDow ? dows[topDow[0]] : null, stamps };
+    const crewCount = new Map<string, number>();
+    for (const c of attended) for (const name of c.crew ?? [])
+      crewCount.set(name, (crewCount.get(name) ?? 0) + 1);
+    const topCrew = [...crewCount.entries()].sort((a, b) => b[1] - a[1])[0];
+
+    return { busiest, longestGap, topVenue, avg, spent, songs, topDow: topDow ? dows[topDow[0]] : null, stamps, topCrew };
   }, [attended]);
 
   return (
@@ -107,6 +112,7 @@ export default function Stats() {
         {s.spent > 0 && <Tile label="INVESTED"><Big v={`$${Math.round(s.spent).toLocaleString()}`} sub="in live music" /></Tile>}
         {s.longestGap > 0 && <Tile label="LONGEST DROUGHT"><Big v={`${s.longestGap}d`} sub="between shows" /></Tile>}
         {s.topDow && <Tile label="YOUR NIGHT"><Big v={s.topDow} sub="most common show day" /></Tile>}
+        {s.topCrew && <Tile label="RIDE OR DIE"><Big v={s.topCrew[0]} sub={`${s.topCrew[1]} shows together`} /></Tile>}
 
         {s.stamps.length > 0 && (
           <Tile wide label="CONCERT PASSPORT">

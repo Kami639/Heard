@@ -8,6 +8,7 @@ import { deleteMedia } from "@/lib/media";
 import { getSupabase } from "@/lib/supabase";
 import { publishProfile, unpublishProfile, myCode, friends, removeFriend, fetchProfile, addFriend } from "@/lib/social";
 import { NotifyCard, ScrobbleCard } from "@/components/settings/NotifyCard";
+import { ImportCard } from "@/components/settings/ImportCard";
 import { useRouter } from "next/navigation";
 import { uniqueShowCount, type ConcertRec } from "@/features/concerts/data";
 
@@ -431,6 +432,7 @@ export default function Profile() {
           />
         </div>
 
+        <ImportCard />
         <NotifyCard />
         <ScrobbleCard />
 

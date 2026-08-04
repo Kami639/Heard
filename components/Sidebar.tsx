@@ -1,13 +1,14 @@
 "use client";
 
 import { usePathname, useRouter } from "next/navigation";
-import { Home, LibraryBig, Music2, Map, Disc3, User, Plus, Trophy, Images, ListOrdered, BarChart3 } from "lucide-react";
+import { Home, LibraryBig, Music2, Map, Disc3, User, Plus, Trophy, Images, ListOrdered, BarChart3, Award } from "lucide-react";
 
 const ITEMS = [
   { href: "/", icon: Home, label: "Home" },
   { href: "/archive", icon: LibraryBig, label: "Archive" },
   { href: "/songs", icon: Music2, label: "Songs Heard" },
   { href: "/stats", icon: BarChart3, label: "Stats" },
+  { href: "/heardies", icon: Award, label: "The Heardies" },
   { href: "/map", icon: Map, label: "Map" },
   { href: "/wrapped", icon: Disc3, label: "Wrapped" },
   { href: "/gallery", icon: Images, label: "Gallery" },

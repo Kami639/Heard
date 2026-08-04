@@ -17,6 +17,9 @@ export default function ManualAdd() {
   const [form, setForm] = useState({
     artist: "", tour: "", venue: "", city: "", country: "", date: "", songs: "",
   });
+  const [mode, setMode] = useState<"show" | "festival">("show");
+  const [acts, setActs] = useState("");        // festival: acts YOU saw, one per line
+  const [lineup, setLineup] = useState<string[]>([]); // fetched lineup -> tappable chips
   const [lookup, setLookup] = useState<"idle" | "loading" | "off">("idle");
   const [note, setNote] = useState<string | null>(null);
   const [scan, setScan] = useState<"idle" | "reading" | "off">("idle");
@@ -43,12 +46,21 @@ export default function ManualAdd() {
       const p = JSON.parse(d.text.replace(/```json|```/g, "").trim());
       setForm((f) => ({
         ...f,
-        artist: [p.artist, ...(p.lineup ?? [])].filter(Boolean).slice(0, 5).join(" & ") || f.artist,
+        artist: mode === "festival" ? f.artist
+          : [p.artist, ...(p.lineup ?? [])].filter(Boolean).slice(0, 5).join(" & ") || f.artist,
         venue: p.venue || f.venue,
         city: p.city || f.city,
         country: p.country || f.country,
         date: p.date || f.date,
       }));
+      if (mode === "festival") {
+        const chosen = new Set(acts.split("\n").map((x) => x.trim().toLowerCase()).filter(Boolean));
+        setLineup(
+          [p.artist, ...(p.lineup ?? [])]
+            .filter(Boolean)
+            .filter((n: string) => !chosen.has(n.toLowerCase()))
+        );
+      }
       setNote(
         `${p.note ? p.note + " " : ""}Filled in by Claude${p.confidence ? ` (${p.confidence} confidence)` : ""} — check it before saving.`
       );
@@ -93,14 +105,24 @@ export default function ManualAdd() {
   }
 
   function save() {
-    if (!form.artist.trim() || !form.date) return;
+    const isFest = mode === "festival";
+    const actList = acts.split("\n").map((x) => x.trim()).filter(Boolean);
+    if (isFest && (!form.tour.trim() || actList.length === 0)) return;
+    if (!isFest && !form.artist.trim()) return;
+    if (!form.date) return;
+    // festival: first two acts become the cover, the rest ride as openers —
+    // they all count in stats, badges, and the artist network
+    const headliner = isFest ? actList.slice(0, 2).join(" & ") : form.artist.trim();
+    const rest = isFest ? actList.slice(2) : [];
     const d = new Date(form.date);
-    const names = splitArtists(form.artist);
+    const names = splitArtists(headliner);
     const c: ConcertRec = {
       id: `manual-${Date.now()}`,
-      artist: form.artist.trim(),
+      artist: headliner,
       artists: names.map((name) => ({ name, imageUrl: null })),
       tour: form.tour.trim() || "Live",
+      festival: isFest ? form.tour.trim() : undefined,
+      openers: rest.length ? rest : undefined,
       venue: form.venue.trim() || "Unknown venue",
       city: form.city.trim(),
       country: form.country.trim().toUpperCase() || undefined,
@@ -110,7 +132,7 @@ export default function ManualAdd() {
       rating: 5, price: 0, photos: 0, notes: "",
       ticketScanned: scanned || undefined,
       c1: "#3a3a3c", c2: "#1c1c1e",
-      initials: form.artist.trim()[0]?.toUpperCase() ?? "?",
+      initials: headliner[0]?.toUpperCase() ?? "?",
       lat: null, lng: null,
     };
     addConcert(c);
@@ -136,11 +158,61 @@ export default function ManualAdd() {
     <AppShell title="add manually">
       <section className="flex flex-1 flex-col gap-3 px-5 pb-8 pt-2">
         <p className="text-xs text-sub">
-          For shows the databases don&apos;t have — festivals, local bills, one-offs.
+          For shows the databases don&apos;t have — local bills, one-offs, and festivals done right.
         </p>
 
-        <input className={field} placeholder="Artist(s) — separate with &" value={form.artist} onChange={set("artist")} />
-        <input className={field} placeholder="Tour or festival (e.g. Dreamville Festival 2025)" value={form.tour} onChange={set("tour")} />
+        <div className="flex gap-2" role="tablist" aria-label="What are you adding?">
+          {([["show", "Regular show"], ["festival", "🎪 Festival"]] as const).map(([m, label]) => (
+            <button
+              key={m}
+              role="tab"
+              aria-selected={mode === m}
+              onClick={() => setMode(m)}
+              className={`pressable flex-1 rounded-xl py-2.5 text-sm font-semibold ${
+                mode === m ? "bg-accent text-black" : "bg-card text-sub"
+              }`}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+
+        {mode === "show" ? (
+          <>
+            <input className={field} placeholder="Artist(s) — separate with &" value={form.artist} onChange={set("artist")} />
+            <input className={field} placeholder="Tour (optional)" value={form.tour} onChange={set("tour")} />
+          </>
+        ) : (
+          <>
+            <input className={field} placeholder="Festival + year (e.g. Rolling Loud Miami 2025)" value={form.tour} onChange={set("tour")} />
+            <textarea
+              className={`${field} min-h-[100px]`}
+              placeholder={"Acts YOU actually saw — one per line\nFirst one becomes the cover"}
+              value={acts}
+              onChange={(e) => setActs(e.target.value)}
+              aria-label="Acts you saw at the festival"
+            />
+            {lineup.length > 0 && (
+              <div>
+                <p className="pb-1.5 text-[11px] text-sub">Tap the ones you caught — nothing is auto-selected:</p>
+                <div className="flex flex-wrap gap-1.5">
+                  {lineup.map((n) => (
+                    <button
+                      key={n}
+                      onClick={() => {
+                        setActs((a) => (a.trim() ? a.replace(/\n?$/, "\n") + n : n));
+                        setLineup((l) => l.filter((x) => x !== n));
+                      }}
+                      className="pressable rounded-full bg-card px-3 py-1.5 text-xs text-ink"
+                    >
+                      ＋ {n}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+          </>
+        )}
 
         <label className={`pressable flex cursor-pointer items-center justify-center rounded-lg bg-card py-2.5 text-sm font-semibold ${scan === "off" ? "text-sub" : "text-accent"}`}>
           {scan === "reading" ? "Reading your ticket…" : scan === "off" ? "Ticket scan needs an API key" : "🎫 Scan a ticket (photo or PDF)"}
@@ -149,10 +221,10 @@ export default function ManualAdd() {
 
         <button
           onClick={askClaude}
-          disabled={lookup === "loading" || (!form.artist && !form.tour)}
+          disabled={lookup === "loading" || (mode === "festival" ? !form.tour.trim() : !form.artist && !form.tour)}
           className="pressable rounded-lg bg-card py-2.5 text-sm font-semibold text-accent disabled:opacity-40"
         >
-          {lookup === "loading" ? "Looking it up…" : lookup === "off" ? "Lookup unavailable — add an API key" : "✨ Fill in what Claude knows"}
+          {lookup === "loading" ? "Looking it up…" : lookup === "off" ? "Lookup unavailable — add an API key" : mode === "festival" ? "✨ Get the lineup (you pick who you saw)" : "✨ Fill in what Claude knows"}
         </button>
         {note && <p className="text-[11px] text-sub">{note}</p>}
 
@@ -176,7 +248,7 @@ export default function ManualAdd() {
           </button>
           <button
             onClick={save}
-            disabled={!form.artist.trim() || !form.date}
+            disabled={!form.date || (mode === "festival" ? !form.tour.trim() || !acts.trim() : !form.artist.trim())}
             className="pressable flex-[1.6] rounded-xl bg-accent py-3 text-sm font-bold text-black disabled:opacity-40"
           >
             ＋ Add to archive

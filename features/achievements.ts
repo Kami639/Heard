@@ -26,6 +26,10 @@ const RARE = [
   "NBA YoungBoy", "YoungBoy Never Broke Again", "Frank Ocean", "Rihanna", "Sade",
   "André 3000", "D'Angelo", "Jai Paul", "Dr. Dre", "Daft Punk", "Summer Walker",
   "Adele", "The Isley Brothers", "Lauryn Hill",
+  "Lil Uzi Vert", "Jay Electronica", "Kanye West", "Ye", "Eminem", "Cardi B",
+  "Solange", "OutKast", "Missy Elliott", "Kate Bush", "Tracy Chapman", "Enya",
+  "Zayn", "Zayn Malik", "Fiona Apple", "Tom Waits", "Portishead", "Aphex Twin",
+  "Sufjan Stevens", "Barbra Streisand",
 ];
 const UNDERGROUND = [
   "Summrs", "Autumn!", "Kankan", "Izaya Tiji", "Osamason", "Nettspend", "Xaviersobased",
@@ -61,9 +65,9 @@ const uniqueCount = (cs: ConcertRec[]) =>
   new Set(attended(cs).map((c) => `${c.venue.toLowerCase()}|${c.dateDisplay}`)).size;
 const mediaCount = (c: ConcertRec) => (c.media?.length ?? 0) + (c.photosData?.length ?? 0);
 
-const FEST_RE = /fest|lolla|coachella|rolling loud|bonnaroo|dreamville|governors ball|acl|osheaga|wireless|summer smash|edc|electric daisy|flog gnaw|glastonbury|made in america|broccoli city|one musicfest|reading|leeds|sxsw/i;
-const atFest = (c: ConcertRec, re: RegExp) => re.test(`${c.venue} ${c.tour}`);
-const festCount = (cs: ConcertRec[]) => attended(cs).filter((c) => atFest(c, FEST_RE)).length;
+export const FEST_RE = /fest|lolla|coachella|rolling loud|bonnaroo|dreamville|governors ball|acl|osheaga|wireless|summer smash|edc|electric daisy|flog gnaw|glastonbury|made in america|broccoli city|one musicfest|reading|leeds|sxsw/i;
+const atFest = (c: ConcertRec, re: RegExp) => re.test(`${c.venue} ${c.tour} ${c.festival ?? ""}`);
+const festCount = (cs: ConcertRec[]) => attended(cs).filter((c) => Boolean(c.festival) || atFest(c, FEST_RE)).length;
 
 // more scenes, straight from the trenches
 const DRAIN = ["Bladee", "Yung Lean", "Ecco2k", "Thaiboy Digital"];
@@ -186,6 +190,7 @@ export const ACHIEVEMENTS: Achievement[] = [
     test: (cs) => cs.some((c) => (c.media?.length ?? 0) + (c.photosData?.length ?? 0) > 0) },
   { id: "festival", icon: "🎡", name: "Festival Season", desc: "Attend a festival", pts: 20,
     test: (cs) => attended(cs).some((c) =>
+      Boolean(c.festival) ||
       /fest|lolla|coachella|rolling loud|bonnaroo|dreamville|governors ball|acl|osheaga|wireless/i
         .test(`${c.venue} ${c.tour}`)) },
   { id: "legend", icon: "🐐", name: "Seen a Legend", desc: "Catch a must-see act live", pts: 30,

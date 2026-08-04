@@ -8,6 +8,7 @@ import { Art } from "@/components/Art";
 import { MOCK_SEARCH, splitArtists, isNoteEntry, type ConcertRec } from "@/features/concerts/data";
 import { COUNTRY_LIST } from "@/lib/countries";
 import { addConcert, getConcerts } from "@/lib/store";
+import { FEST_RE } from "@/features/achievements";
 import { setPreview } from "@/lib/previewStore";
 
 const PALETTE = [
@@ -44,6 +45,12 @@ export default function Add() {
   const [q, setQ] = useState("");
   const [year, setYear] = useState("All");
   const [country, setCountry] = useState("All");
+  const [city, setCity] = useState("");
+  const [venue, setVenue] = useState("");
+  const [stype, setStype] = useState<"all" | "tour" | "festival">("all");
+  const [showFilters, setShowFilters] = useState(false);
+  const [literal, setLiteral] = useState(false); // user turned off smart parsing
+  const [understood, setUnderstood] = useState<string | null>(null);
   const [tourFilter, setTourFilter] = useState("All");
   const [tourOptions, setTourOptions] = useState<string[]>([]);
   const [tourCounts, setTourCounts] = useState<Record<string, number>>({});
@@ -95,13 +102,32 @@ export default function Add() {
   useEffect(() => {
     if (lockedArtist && q.trim().toLowerCase() !== lockedArtist.toLowerCase()) setLockedArtist(null);
     if (timer.current) clearTimeout(timer.current);
-    if (q.length < 2) { setResults([]); setSuggestion(null); setStatus("idle"); return; }
+    if (q.length < 2 && !city.trim() && !venue.trim()) { setResults([]); setSuggestion(null); setStatus("idle"); setUnderstood(null); return; }
     setStatus("loading");
     setTourFilter("All");
     setTourOptions([]);
     timer.current = setTimeout(() => search(q.trim(), year, 1, false), 650);
     return () => { if (timer.current) clearTimeout(timer.current); };
-  }, [q, year, country]);
+  }, [q, year, country, city, venue, stype, literal]);
+
+  /* Light query understanding — conservative on purpose.
+   *   "drake toronto 2023"  ->  q "drake toronto"  + year 2023
+   *   "drake in toronto"    ->  q "drake"          + city "toronto"
+   * Anything ambiguous is left alone; the server's own strategies handle it. */
+  function parseQuery(raw: string): { qClean: string; autoYear?: string; autoCity?: string } {
+    if (literal) return { qClean: raw };
+    let qClean = raw.trim();
+    let autoYear: string | undefined;
+    let autoCity: string | undefined;
+
+    const ym = qClean.match(/\s(19[5-9]\d|20[0-4]\d)$/);
+    if (ym) { autoYear = ym[1]; qClean = qClean.slice(0, ym.index).trim(); }
+
+    const im = qClean.match(/^(.{2,}?)\s+in\s+([a-zA-Z .'-]{3,})$/i);
+    if (im) { qClean = im[1].trim(); autoCity = im[2].trim(); }
+
+    return { qClean, autoYear, autoCity };
+  }
 
   async function fetchArtistFix(query: string) {
     try {
@@ -114,16 +140,22 @@ export default function Add() {
 
   async function search(query: string, yr: string, pg: number, append: boolean, tour?: string, lockOverride?: string) {
     try {
+      const parsed = tour ? { qClean: query } : parseQuery(query);
+      const effYear = yr !== "All" ? yr : parsed.autoYear;
+      const effCity = city.trim() || parsed.autoCity;
       const params = new URLSearchParams({ p: String(pg) });
       if (tour) {
         params.set("tourName", tour);
         const hint = results.find((r) => r.tour === tour)?.artist;
         if (hint) params.set("artist", hint);
-      } else {
-        params.set("q", query);
+      } else if (parsed.qClean) {
+        params.set("q", parsed.qClean);
       }
-      if (yr !== "All") params.set("year", yr);
+      if (effYear) params.set("year", effYear);
       if (country !== "All") params.set("country", country);
+      if (effCity) params.set("city", effCity);
+      if (venue.trim()) params.set("venue", venue.trim());
+      if (stype !== "all") params.set("type", stype);
       const lock = lockOverride ?? lockedArtist;
       if (lock && !tour) {
         params.set("artist", lock);
@@ -138,6 +170,27 @@ export default function Add() {
       if (!res.ok) throw new Error("unavailable");
       const { results: raw, matchedAs = "" } = await res.json();
       fetchArtistFix(query); // spelling check in parallel
+
+      {
+        const bits: string[] = [];
+        if (!tour && parsed.qClean) bits.push(parsed.qClean);
+        if (tour) bits.push(tour);
+        if (effCity) bits.push(`📍 ${effCity}`);
+        if (venue.trim()) bits.push(`🏟 ${venue.trim()}`);
+        if (effYear) bits.push(`🗓 ${effYear}`);
+        if (stype !== "all") bits.push(stype === "festival" ? "🎪 festivals only" : "tours only");
+        const how: Record<string, string> = {
+          artist: "artist", "artist+detail": "artist + place/tour", tour: "tour",
+          "tour+place": "tour + place", place: "place", country: "country",
+          structured: "your filters", interpreted: "interpreted", wikipedia: "via Wikipedia",
+          event: "event",
+        };
+        setUnderstood(
+          bits.length > 1 || matchedAs === "structured" || parsed.autoYear || parsed.autoCity
+            ? `${bits.join(" · ")}${how[matchedAs] ? `  (matched: ${how[matchedAs]})` : ""}`
+            : null
+        );
+      }
 
       // if this looks like an artist, offer their tours as a shortcut
       if (matchedAs === "artist" && !append) {
@@ -263,7 +316,10 @@ export default function Add() {
 
   const pick = (r: Result) => {
     const dupe = getConcerts().find((c) => c.id.startsWith(r.id));
-    const c: ConcertRec = { ...r, id: `${r.id}-${Date.now()}`, rating: 5, price: 0, photos: 0, notes: "" };
+    const c: ConcertRec = {
+      ...r, id: `${r.id}-${Date.now()}`, rating: 5, price: 0, photos: 0, notes: "",
+      festival: FEST_RE.test(`${r.tour} ${r.venue}`) ? r.tour : undefined,
+    };
     addConcert(c);
     // enrich with genres in the background (feeds Top Genres in Wrapped)
     fetch(`/api/artist?name=${encodeURIComponent(splitArtists(r.artist)[0] ?? r.artist)}`)
@@ -298,31 +354,88 @@ export default function Add() {
                 search(q, year, 1, false);
               }
             }}
-            placeholder="Artist, tour, festival, or city"
+            placeholder='Try "drake toronto 2023" or "rolling loud"'
             className="w-full min-w-0 bg-transparent text-[16px] text-ink outline-none placeholder:text-sub"
             autoFocus
           />
         </div>
 
-        <div className="flex gap-2">
-          <select
-            value={country}
-            onChange={(e) => setCountry(e.target.value)}
-            className="min-w-0 flex-1 truncate rounded-lg bg-card px-3 py-2 text-sm text-accent outline-none"
-            aria-label="Filter by country"
+        <div className="flex items-center gap-2">
+          <div className="flex flex-1 gap-1 rounded-lg bg-card p-1" role="tablist" aria-label="Show type">
+            {([["all", "All"], ["tour", "Tours"], ["festival", "🎪 Festivals"]] as const).map(([v, label]) => (
+              <button
+                key={v}
+                role="tab"
+                aria-selected={stype === v}
+                onClick={() => setStype(v)}
+                className={`pressable flex-1 rounded-md py-1.5 text-xs font-semibold ${
+                  stype === v ? "bg-accent text-black" : "text-sub"
+                }`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+          <button
+            onClick={() => setShowFilters((v) => !v)}
+            aria-expanded={showFilters}
+            className={`pressable shrink-0 rounded-lg px-3 py-2 text-sm ${
+              showFilters || city || venue || year !== "All" || country !== "All"
+                ? "bg-accent/15 font-semibold text-accent" : "bg-card text-sub"
+            }`}
           >
-            <option value="All">All countries</option>
-            {COUNTRY_LIST.map((c) => <option key={c.code} value={c.code}>{c.name}</option>)}
-          </select>
-          <select
-            value={year}
-            onChange={(e) => setYear(e.target.value)}
-            className="w-24 shrink-0 rounded-lg bg-card px-3 py-2 text-sm text-accent outline-none"
-            aria-label="Filter by year"
-          >
-            {YEARS.map((y) => <option key={y} value={y}>{y === "All" ? "Year" : y}</option>)}
-          </select>
+            ⚙ Filters{(city ? 1 : 0) + (venue ? 1 : 0) + (year !== "All" ? 1 : 0) + (country !== "All" ? 1 : 0) > 0
+              ? ` · ${(city ? 1 : 0) + (venue ? 1 : 0) + (year !== "All" ? 1 : 0) + (country !== "All" ? 1 : 0)}` : ""}
+          </button>
         </div>
+
+        {showFilters && (
+          <div className="fade-up flex flex-col gap-2 rounded-xl bg-card p-3">
+            <div className="flex gap-2">
+              <input
+                value={city}
+                onChange={(e) => setCity(e.target.value)}
+                placeholder="City (e.g. Toronto)"
+                aria-label="Filter by city"
+                className="min-w-0 flex-1 rounded-lg bg-card2 px-3 py-2 text-sm text-ink outline-none placeholder:text-sub"
+              />
+              <input
+                value={venue}
+                onChange={(e) => setVenue(e.target.value)}
+                placeholder="Venue (e.g. Red Rocks)"
+                aria-label="Filter by venue"
+                className="min-w-0 flex-1 rounded-lg bg-card2 px-3 py-2 text-sm text-ink outline-none placeholder:text-sub"
+              />
+            </div>
+            <div className="flex gap-2">
+              <select
+                value={country}
+                onChange={(e) => setCountry(e.target.value)}
+                className="min-w-0 flex-1 truncate rounded-lg bg-card2 px-3 py-2 text-sm text-accent outline-none"
+                aria-label="Filter by country"
+              >
+                <option value="All">All countries</option>
+                {COUNTRY_LIST.map((c) => <option key={c.code} value={c.code}>{c.name}</option>)}
+              </select>
+              <select
+                value={year}
+                onChange={(e) => setYear(e.target.value)}
+                className="w-24 shrink-0 rounded-lg bg-card2 px-3 py-2 text-sm text-accent outline-none"
+                aria-label="Filter by year"
+              >
+                {YEARS.map((y) => <option key={y} value={y}>{y === "All" ? "Year" : y}</option>)}
+              </select>
+            </div>
+            {(city || venue || year !== "All" || country !== "All") && (
+              <button
+                onClick={() => { setCity(""); setVenue(""); setYear("All"); setCountry("All"); }}
+                className="pressable self-start text-[11px] text-sub underline underline-offset-4"
+              >
+                Clear all filters
+              </button>
+            )}
+          </div>
+        )}
 
         {typeahead.length > 0 && results.length === 0 && (
           <div className="overflow-hidden rounded-2xl bg-card">
@@ -359,6 +472,14 @@ export default function Add() {
           </button>
         )}
 
+        {understood && status !== "loading" && (
+          <p className="fade-up px-1 text-center font-mono text-[11px] text-sub">
+            {understood}
+            <button onClick={() => setLiteral((v) => !v)} className="pressable pl-2 text-accent underline underline-offset-2">
+              {literal ? "smart search" : "search literally"}
+            </button>
+          </p>
+        )}
         {status === "loading" && <p className="text-center text-xs text-sub">Searching…</p>}
         {lockedArtist && (
           <div className="flex items-center gap-2 self-start rounded-full bg-accent/15 py-1.5 pl-3 pr-1.5 text-xs">
@@ -464,6 +585,9 @@ export default function Add() {
                   )}
                   {r.wikiSourced && (
                     <span className="shrink-0 rounded-full bg-card2 px-2 py-0.5 text-[10px] font-semibold text-accent/80">WIKI</span>
+                  )}
+                  {FEST_RE.test(`${r.tour} ${r.venue}`) && (
+                    <span className="shrink-0 rounded-full bg-accent/15 px-2 py-0.5 text-[10px] font-semibold text-accent">🎪</span>
                   )}
                 </div>
                 <div

@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { ChevronRight, Music2, Disc3, Trophy, Images, ListOrdered, BarChart3 } from "lucide-react";
+import { ChevronRight, Music2, Disc3, Trophy, Images, ListOrdered, BarChart3, Award, Zap } from "lucide-react";
 import { Onboarding, BackfillNudge } from "@/components/Onboarding";
 import { AppShell } from "@/components/AppShell";
 import { Art, Stars } from "@/components/Art";
@@ -75,6 +75,33 @@ export default function Home() {
           </button>
         )}
 
+        {(() => {
+          const future = concerts
+            .filter((c) => !c.cancelled)
+            .map((c) => ({ c, t: +new Date(c.dateDisplay) }))
+            .filter((x) => !isNaN(x.t) && x.t > Date.now() + 3600 * 1000)
+            .sort((a, b) => a.t - b.t);
+          if (!future.length) return null;
+          const { c, t } = future[0];
+          const days = Math.ceil((t - Date.now()) / 86400000);
+          return (
+            <button
+              onClick={() => router.push(`/concert/${c.id}`)}
+              className="pressable fade-up flex items-center gap-4 rounded-2xl border border-accent/25 bg-accent/10 p-4 text-left"
+            >
+              <div className="flex flex-col items-center rounded-xl bg-accent px-3.5 py-2 text-black">
+                <span className="font-display text-2xl font-extrabold leading-none">{days}</span>
+                <span className="text-[9px] font-bold tracking-wide">{days === 1 ? "DAY" : "DAYS"}</span>
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className="truncate font-display text-[16px] font-extrabold">{c.artist}</p>
+                <p className="truncate text-xs text-sub">{c.venue} · {c.dateDisplay}</p>
+              </div>
+              <span className="shrink-0 text-lg" aria-hidden>🎟️</span>
+            </button>
+          );
+        })()}
+
         <BackfillNudge concertCount={concerts.length} />
 
         {upcoming.length > 0 && (
@@ -122,6 +149,8 @@ export default function Home() {
           {[
             { label: "Songs Heard", href: "/songs", icon: Music2 },
             { label: "Stats", href: "/stats", icon: BarChart3 },
+            { label: "The Heardies", href: "/heardies", icon: Award },
+            { label: "Tonight", href: "/tonight", icon: Zap },
             { label: "Wrapped", href: "/wrapped", icon: Disc3 },
             { label: "Achievements", href: "/achievements", icon: Trophy },
             { label: "Gallery", href: "/gallery", icon: Images },

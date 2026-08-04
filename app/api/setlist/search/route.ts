@@ -5,6 +5,7 @@ import {
 import { fetchTourInfo, type TourInfo } from "@/lib/wikiTour";
 import { interpretQuery } from "@/lib/aiSearch";
 import { COUNTRY_CODES } from "@/lib/countries";
+import { FEST_RE } from "@/features/achievements";
 
 /* ────────────────────────────────────────────────────────────────────────────
    SEARCH — intent first, then one precise lookup.
@@ -247,16 +248,22 @@ export async function GET(req: NextRequest) {
   const tourQ = sp.get("tourName");
   const year = sp.get("year") ?? undefined;
   const country = sp.get("country") ?? undefined;
+  const city = sp.get("city")?.trim() || undefined;
+  const venue = sp.get("venue")?.trim() || undefined;
+  const type = sp.get("type") ?? "all"; // all | tour | festival
   const page = Number(sp.get("p") ?? "1");
 
-  if (!q && !artistLock && !tourQ) {
-    return NextResponse.json({ error: "q, artist or tourName required" }, { status: 400 });
+  if (!q && !artistLock && !tourQ && !city && !venue) {
+    return NextResponse.json({ error: "q, artist, tourName, city or venue required" }, { status: 400 });
   }
 
+  const isFest = (r: SetlistResult) => FEST_RE.test(`${r.tour ?? ""} ${r.venue} ${r.info ?? ""}`);
   const applyFilters = (rows: SetlistResult[]) => {
     let out = rows;
     if (year) out = out.filter((r) => r.date.startsWith(year));
     if (country) out = out.filter((r) => r.country === country);
+    if (type === "festival") out = out.filter(isFest);
+    if (type === "tour") out = out.filter((r) => r.tour && !isFest(r));
     return out;
   };
 
@@ -268,6 +275,31 @@ export async function GET(req: NextRequest) {
   };
 
   try {
+    /* 0 ── structured filters (city / venue fields from the UI) ---------- */
+    if (city || venue) {
+      const artistHint = artistLock || q || undefined;
+      let resolved: { mbid: string; name: string } | null = null;
+      if (artistHint) resolved = await resolveArtist(artistHint);
+
+      const collected: SetlistResult[] = [];
+      for (let p = page; p < page + 2; p++) {
+        const rows = await searchSetlists({
+          artistName: resolved?.name ?? artistHint,
+          cityName: city, venueName: venue,
+          year, countryCode: country, p,
+        }).catch(() => []);
+        collected.push(...rows);
+        if (rows.length < 20) break;
+      }
+      let rows = collected;
+      if (resolved) rows = rows.filter((r) => sameArtist(r.artist, resolved!.name));
+      if (city) rows = rows.filter((r) => samePlace(r.city, city));
+      if (venue) rows = rows.filter((r) => samePlace(r.venue, venue));
+      // no artist given: a bare city/venue search is still a valid browse
+      if (rows.length || !artistHint) return await finish(rows, "structured");
+      // fall through: maybe the free-text strategies can still make sense of it
+    }
+
     /* explicit modes ---------------------------------------------------- */
     if (artistLock && !q) {
       const a = await resolveArtist(artistLock);

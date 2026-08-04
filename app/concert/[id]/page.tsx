@@ -62,6 +62,7 @@ export default function Concert({ params }: { params: Promise<{ id: string }> })
   const [songRarity, setSongRarity] = useState<{ totalShows: number; counts: Record<string, number> } | null>(null);
   const [others, setOthers] = useState<{ code: string; name: string; shows: number }[]>([]);
   const [fullMode, setFullMode] = useState(false);
+  const [crewInput, setCrewInput] = useState("");
 
   const stopSong = () => {
     audioRef.current?.pause();
@@ -513,6 +514,9 @@ export default function Concert({ params }: { params: Promise<{ id: string }> })
                   </button>
                 ))}
               </div>
+            )}
+            {c.festival && (
+              <span className="mr-2 inline-block rounded-full bg-accent/15 px-2 py-0.5 align-middle text-[10px] font-semibold text-accent">🎪 FESTIVAL</span>
             )}
             {c.tour ? (
               <button
@@ -1144,6 +1148,40 @@ export default function Concert({ params }: { params: Promise<{ id: string }> })
                 {label} ▸
               </a>
             ))}
+          </div>
+        </Section>
+
+        <Section label="THE CREW">
+          <p className="mb-2 text-xs text-sub">
+            Who was there with you? Tap a name on their page later to see every show together.
+          </p>
+          <div className="flex flex-wrap items-center gap-1.5">
+            {(c.crew ?? []).map((name) => (
+              <button
+                key={name}
+                onClick={() => updateConcert(c.id, { crew: (c.crew ?? []).filter((x) => x !== name) })}
+                aria-label={`Remove ${name} from the crew`}
+                className="pressable flex items-center gap-1.5 rounded-full bg-card px-3 py-1.5 text-sm"
+              >
+                🤝 {name} <span className="text-[10px] text-sub">✕</span>
+              </button>
+            ))}
+            <input
+              value={crewInput}
+              onChange={(e) => setCrewInput(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && crewInput.trim()) {
+                  const name = crewInput.trim();
+                  if (!(c.crew ?? []).some((x) => x.toLowerCase() === name.toLowerCase())) {
+                    updateConcert(c.id, { crew: [...(c.crew ?? []), name] });
+                  }
+                  setCrewInput("");
+                }
+              }}
+              placeholder={(c.crew?.length ?? 0) ? "＋ add another" : "＋ add a name, press return"}
+              aria-label="Add someone to the crew"
+              className="min-w-[140px] flex-1 rounded-full bg-card2 px-3 py-1.5 text-sm text-ink outline-none placeholder:text-sub"
+            />
           </div>
         </Section>
 

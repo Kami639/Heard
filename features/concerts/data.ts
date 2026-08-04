@@ -33,6 +33,8 @@ export interface ConcertRec {
   lineupChecked?: boolean;
   tourArtChecked?: boolean;
   moments?: string[];
+  festival?: string | null; // set when this record is a festival day, not a single-bill show
+  crew?: string[]; // the people you were there with
   tourPosition?: { index: number; total: number };
   encoreCount?: number;
   ticketScanned?: boolean;
