@@ -42,6 +42,7 @@ export async function publishProfile(displayName: string): Promise<string | null
   if (!session) return null;
 
   const code = myCode() ?? newCode();
+  rememberPublishName(displayName);
   const cs = getConcerts().filter((c) => !c.cancelled);
 
   const payload: PublicProfile = {
@@ -142,4 +143,28 @@ export async function whoWasThere(artist: string, dateDisplay: string):
       name: (r.data as PublicProfile)?.name ?? "A concert head",
       shows: (r.data as PublicProfile)?.shows ?? 0,
     }));
+}
+
+
+/* ── keep the public snapshot fresh ───────────────────────────────────
+ * Once someone has published, every archive change quietly re-publishes
+ * (debounced) so friends and "in the room" matching never see stale data.
+ * Never publishes anyone who hasn't opted in. */
+
+const NAME_KEY = "heard.publishname.v1";
+
+export function rememberPublishName(name: string) {
+  try { localStorage.setItem(NAME_KEY, name); } catch {}
+}
+
+let republishTimer: ReturnType<typeof setTimeout> | null = null;
+
+export function scheduleRepublish() {
+  if (!myCode()) return; // not published — nothing to refresh
+  if (republishTimer) clearTimeout(republishTimer);
+  republishTimer = setTimeout(() => {
+    let name = "A concert head";
+    try { name = localStorage.getItem(NAME_KEY) || name; } catch {}
+    publishProfile(name).catch(() => {});
+  }, 20_000);
 }

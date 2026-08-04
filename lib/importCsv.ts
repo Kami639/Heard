@@ -6,7 +6,7 @@
  * column order; dates in almost any format `new Date` can chew. */
 
 import { splitArtists, type ConcertRec } from "@/features/concerts/data";
-import { getConcerts, addConcert } from "./store";
+import { getConcerts, addConcertsBulk } from "./store";
 
 export interface ParsedRow {
   artist: string; date: Date; venue: string; city: string; country?: string; tour?: string;
@@ -81,6 +81,7 @@ export function parseImport(text: string): ImportPreview {
  *  the app's existing art-healer, so imports stay instant. */
 export function commitImport(rows: ParsedRow[]): number {
   let n = 0;
+  const batch: ConcertRec[] = [];
   for (const r of rows) {
     const names = splitArtists(r.artist);
     const c: ConcertRec = {
@@ -99,8 +100,9 @@ export function commitImport(rows: ParsedRow[]): number {
       initials: r.artist[0]?.toUpperCase() ?? "?",
       lat: null, lng: null,
     };
-    addConcert(c);
+    batch.push(c);
     n++;
   }
+  addConcertsBulk(batch);
   return n;
 }

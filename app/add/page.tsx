@@ -51,6 +51,7 @@ export default function Add() {
   const [showFilters, setShowFilters] = useState(false);
   const [literal, setLiteral] = useState(false); // user turned off smart parsing
   const [understood, setUnderstood] = useState<string | null>(null);
+  const restoredRef = useRef(false);
   const [tourFilter, setTourFilter] = useState("All");
   const [tourOptions, setTourOptions] = useState<string[]>([]);
   const [tourCounts, setTourCounts] = useState<Record<string, number>>({});
@@ -69,8 +70,28 @@ export default function Add() {
 
   useEffect(() => {
     try { setRecent(JSON.parse(localStorage.getItem("heard.recent.v1") ?? "[]")); } catch {}
-    // arriving via "Add another" prefills the last search
     const pre = new URLSearchParams(window.location.search).get("q");
+    // "Add another" (and plain back-navigation) restores the whole search:
+    // query, every filter, and the results you were just looking at.
+    try {
+      const saved = JSON.parse(sessionStorage.getItem("heard.addstate.v1") ?? "null");
+      if (saved && Date.now() - saved.at < 30 * 60 * 1000) {
+        if (saved.year) setYear(saved.year);
+        if (saved.country) setCountry(saved.country);
+        if (saved.city) setCity(saved.city);
+        if (saved.venue) setVenue(saved.venue);
+        if (saved.stype) setStype(saved.stype);
+        if (!pre || pre === saved.q) {
+          if (saved.q) setQ(saved.q);
+          if (saved.results?.length) {
+            setResults(saved.results);
+            setStatus("live");
+            restoredRef.current = true; // skip the automatic re-search once
+          }
+          return;
+        }
+      }
+    } catch {}
     if (pre) setQ(pre);
   }, []);
 
@@ -100,6 +121,7 @@ export default function Add() {
   }, [q]);
 
   useEffect(() => {
+    if (restoredRef.current) { restoredRef.current = false; return; }
     if (lockedArtist && q.trim().toLowerCase() !== lockedArtist.toLowerCase()) setLockedArtist(null);
     if (timer.current) clearTimeout(timer.current);
     if (q.length < 2 && !city.trim() && !venue.trim()) { setResults([]); setSuggestion(null); setStatus("idle"); setUnderstood(null); return; }
@@ -301,6 +323,14 @@ export default function Add() {
       setResults(append ? (prev) => [...prev, ...mapped] as any : mapped);
       setPage(pg);
       setStatus("live");
+      if (!append) {
+        try {
+          sessionStorage.setItem("heard.addstate.v1", JSON.stringify({
+            q: tour ? q : query, year: yr, country, city, venue, stype,
+            results: mapped.slice(0, 30), at: Date.now(),
+          }));
+        } catch {}
+      }
       if (!append && !tour && mapped.length) saveRecent(query);
     } catch {
       const mock = MOCK_SEARCH.filter((r) => r.artist.toLowerCase().includes(query.toLowerCase()));
@@ -358,6 +388,18 @@ export default function Add() {
             className="w-full min-w-0 bg-transparent text-[16px] text-ink outline-none placeholder:text-sub"
             autoFocus
           />
+          {q && (
+            <button
+              onClick={() => {
+                setQ(""); setResults([]); setStatus("idle"); setUnderstood(null); setLockedArtist(null);
+                try { sessionStorage.removeItem("heard.addstate.v1"); } catch {}
+              }}
+              aria-label="Clear search"
+              className="pressable flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-card2 text-[11px] text-sub"
+            >
+              ✕
+            </button>
+          )}
         </div>
 
         <div className="flex items-center gap-2">

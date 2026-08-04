@@ -18,6 +18,17 @@ export default function Tonight() {
   const [glowCycle, setGlowCycle] = useState(false);
   const wakeRef = useRef<any>(null);
 
+  // the sign you made last time is probably the sign you want tonight
+  useEffect(() => {
+    try {
+      const saved = JSON.parse(localStorage.getItem("heard.sign.v1") ?? "null");
+      if (saved?.text) { setSign(saved.text); if (saved.color) setColor(saved.color); }
+    } catch {}
+  }, []);
+  useEffect(() => {
+    try { localStorage.setItem("heard.sign.v1", JSON.stringify({ text: sign, color })); } catch {}
+  }, [sign, color]);
+
   // keep the screen on while performing
   useEffect(() => {
     let cancelled = false;

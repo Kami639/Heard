@@ -32,6 +32,22 @@ function writeLocal(list: ConcertRec[]) {
   window.dispatchEvent(new Event("heard-sync"));
 }
 
+export async function pushConcertsBulk(list: ConcertRec[]) {
+  const sb = getSupabase();
+  if (!sb) return;
+  const { data: { session } } = await sb.auth.getSession();
+  if (!session) return;
+  for (let i = 0; i < list.length; i += 50) {
+    const rows = list.slice(i, i + 50).map((c) => ({
+      id: c.id,
+      user_id: session.user.id,
+      data: c,
+      updated_at: new Date(c.updatedAt ?? Date.now()).toISOString(),
+    }));
+    await sb.from("concerts").upsert(rows).then(() => {});
+  }
+}
+
 export async function pushConcert(c: ConcertRec) {
   const sb = getSupabase();
   if (!sb) return;

@@ -75,6 +75,20 @@ export function AppShell({
     (async () => {
       try {
         const { fullSync } = await import("@/lib/sync");
+        // Coming back to the app? Pull whatever synced from other devices.
+        // Throttled so tab-switching doesn't hammer Supabase.
+        let lastFocusSync = Date.now();
+        const onFocus = () => {
+          if (document.visibilityState !== "visible") return;
+          if (Date.now() - lastFocusSync < 60_000) return;
+          lastFocusSync = Date.now();
+          fullSync();
+        };
+        document.addEventListener("visibilitychange", onFocus);
+        window.addEventListener("focus", onFocus);
+        // published archives quietly stay current
+        const { scheduleRepublish } = await import("@/lib/social");
+        window.addEventListener("heard-sync", scheduleRepublish);
         const { getSupabase } = await import("@/lib/supabase");
         fullSync();
         const sb = getSupabase();

@@ -62,6 +62,17 @@ export function addConcert(c: ConcertRec) {
   import("./sync").then((m) => m.pushConcert(stamped)).catch(() => {});
 }
 
+/** Import-scale writes: ONE localStorage write, ONE announce, chunked sync.
+ *  (500 shows through addConcert would mean 500 rewrites + 500 upserts.) */
+export function addConcertsBulk(list: ConcertRec[]) {
+  if (!list.length) return;
+  const stamped = list.map((c) => ({ ...c, updatedAt: Date.now(), hlc: hlcNow() }));
+  const added: ConcertRec[] = JSON.parse(localStorage.getItem(KEY) ?? "[]");
+  localStorage.setItem(KEY, JSON.stringify([...stamped, ...added]));
+  announce();
+  import("./sync").then((m) => m.pushConcertsBulk(stamped)).catch(() => {});
+}
+
 export function daysUntil(dateDisplay: string): number | null {
   const d = new Date(dateDisplay);
   if (isNaN(+d)) return null;

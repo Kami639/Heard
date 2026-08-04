@@ -119,8 +119,18 @@ export default function Home() {
                     <p className="truncate text-[13px] font-semibold">{u.artist}</p>
                     <p className="truncate text-[11px] text-sub">{u.city}</p>
                     <p className="truncate text-[11px] text-sub">{u.venue}</p>
-                    <p className="pt-1 text-[11px] font-semibold text-accent">
-                      {days <= 0 ? "today" : `in ${days} ${days === 1 ? "day" : "days"}`}
+                    <p className="flex items-center justify-between pt-1 text-[11px] font-semibold text-accent">
+                      <span>{days <= 0 ? "today" : `in ${days} ${days === 1 ? "day" : "days"}`}</span>
+                      {u.url && (
+                        <span
+                          role="link"
+                          aria-label="Get tickets"
+                          onClick={(e) => { e.stopPropagation(); window.open(u.url, "_blank", "noopener"); }}
+                          className="pressable rounded-full bg-accent/15 px-2 py-0.5 text-[10px]"
+                        >
+                          tickets ↗
+                        </span>
+                      )}
                     </p>
                   </button>
                 );
