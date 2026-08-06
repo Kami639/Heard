@@ -104,7 +104,7 @@ export function BackfillNudge({ concertCount }: { concertCount: number }) {
       <button
         onClick={() => { setHidden(true); try { localStorage.setItem("heard.nudge.hide", "1"); } catch {} }}
         aria-label="Dismiss backfill reminder"
-        className="pressable shrink-0 px-1 text-sub"
+        className="pressable shrink-0 p-2 text-sub"
       >
         ✕
       </button>

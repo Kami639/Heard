@@ -108,9 +108,12 @@ export function Heatmap({ concerts }: { concerts: ConcertRec[] }) {
       {picked && (
         <div className="fade-up rounded-xl bg-card2 px-3 py-2">
           {picked.shows.map((s) => (
-            <a key={s.id} href={`/concert/${s.id}`} className="block py-0.5 text-[13px]">
-              <span className="font-semibold">{s.artist}</span>
-              <span className="text-sub"> · {s.venue} · {picked.date}</span>
+            <a key={s.id} href={`/concert/${s.id}`} className="pressable flex items-center justify-between py-1 text-[13px]">
+              <span className="min-w-0 truncate">
+                <span className="font-semibold">{s.artist}</span>
+                <span className="text-sub"> · {s.venue} · {picked.date}</span>
+              </span>
+              <span className="shrink-0 pl-2 text-sub" aria-hidden>▸</span>
             </a>
           ))}
         </div>

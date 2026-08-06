@@ -63,6 +63,7 @@ export default function Concert({ params }: { params: Promise<{ id: string }> })
   const [others, setOthers] = useState<{ code: string; name: string; shows: number }[]>([]);
   const [fullMode, setFullMode] = useState(false);
   const [crewInput, setCrewInput] = useState("");
+  const [sharing, setSharing] = useState<string | null>(null);
 
   const stopSong = () => {
     audioRef.current?.pause();
@@ -1157,14 +1158,22 @@ export default function Concert({ params }: { params: Promise<{ id: string }> })
           </p>
           <div className="flex flex-wrap items-center gap-1.5">
             {(c.crew ?? []).map((name) => (
-              <button
-                key={name}
-                onClick={() => updateConcert(c.id, { crew: (c.crew ?? []).filter((x) => x !== name) })}
-                aria-label={`Remove ${name} from the crew`}
-                className="pressable flex items-center gap-1.5 rounded-full bg-card px-3 py-1.5 text-sm"
-              >
-                🤝 {name} <span className="text-[10px] text-sub">✕</span>
-              </button>
+              <span key={name} className="flex items-center overflow-hidden rounded-full bg-card text-sm">
+                <button
+                  onClick={() => router.push(`/crew/${encodeURIComponent(name)}`)}
+                  aria-label={`See every show with ${name}`}
+                  className="pressable py-1.5 pl-3 pr-1.5"
+                >
+                  🤝 {name}
+                </button>
+                <button
+                  onClick={() => updateConcert(c.id, { crew: (c.crew ?? []).filter((x) => x !== name) })}
+                  aria-label={`Remove ${name} from the crew`}
+                  className="pressable py-1.5 pl-1.5 pr-3 text-[11px] text-sub"
+                >
+                  ✕
+                </button>
+              </span>
             ))}
             <input
               value={crewInput}
@@ -1211,13 +1220,17 @@ export default function Concert({ params }: { params: Promise<{ id: string }> })
             ["⤓ CARD", () => downloadShareCard(c)],
             ["⤓ POSTER", () => downloadGigPoster(c)],
             ["⤓ STUB", () => downloadTicketStub(c)],
-          ] as [string, () => void][]).map(([label, fn]) => (
+          ] as [string, () => Promise<void> | void][]).map(([label, fn]) => (
             <button
               key={label}
-              onClick={fn}
-              className="pressable rounded-full border border-hairline bg-card px-5 py-2.5 font-mono text-xs tracking-[0.15em]"
+              disabled={sharing !== null}
+              onClick={async () => {
+                setSharing(label);
+                try { await fn(); } finally { setSharing(null); }
+              }}
+              className="pressable rounded-full border border-hairline bg-card px-5 py-2.5 font-mono text-xs tracking-[0.15em] disabled:opacity-50"
             >
-              {label}
+              {sharing === label ? "MAKING…" : label}
             </button>
           ))}
         </div>

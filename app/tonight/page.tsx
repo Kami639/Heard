@@ -79,6 +79,9 @@ export default function Tonight() {
         >
           {sign.toUpperCase()}&nbsp;&nbsp;&nbsp;&nbsp;{sign.toUpperCase()}&nbsp;&nbsp;&nbsp;&nbsp;
         </div>
+        <p className="absolute bottom-[calc(1rem+env(safe-area-inset-bottom))] left-0 right-0 text-center font-mono text-[11px] text-white/40">
+          tap anywhere to exit
+        </p>
         <style>{`
           .led-marquee { animation: ledscroll linear infinite; will-change: transform; }
           @keyframes ledscroll { from { transform: translateX(0); } to { transform: translateX(-50%); } }
@@ -95,7 +98,11 @@ export default function Tonight() {
         style={{ backgroundColor: glowColor }}
         onClick={() => setMode("idle")}
         role="button" aria-label="Tap to exit the glow"
-      />
+      >
+        <p className="absolute bottom-[calc(1rem+env(safe-area-inset-bottom))] left-0 right-0 text-center font-mono text-[11px] text-black/30">
+          tap anywhere to exit
+        </p>
+      </div>
     );
   }
 

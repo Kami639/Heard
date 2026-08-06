@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { AppShell } from "@/components/AppShell";
 import { Heatmap } from "@/components/viz/Heatmap";
 import { ArtistNetwork } from "@/components/viz/ArtistNetwork";
@@ -32,6 +32,7 @@ function Big({ v, sub }: { v: string | number; sub: string }) {
 
 export default function Stats() {
   const concerts = useConcerts();
+  const [stamping, setStamping] = useState(false);
   const attended = useMemo(() => concerts.filter((c) => !c.cancelled), [concerts]);
 
   const s = useMemo(() => {
@@ -121,10 +122,14 @@ export default function Stats() {
               export it as a shareable passport page.
             </p>
             <button
-              onClick={() => downloadPassportCard(s.stamps)}
-              className="pressable mt-1 self-start rounded-full border border-hairline bg-card2 px-5 py-2 font-mono text-xs tracking-[0.15em]"
+              disabled={stamping}
+              onClick={async () => {
+                setStamping(true);
+                try { await downloadPassportCard(s.stamps); } finally { setStamping(false); }
+              }}
+              className="pressable mt-1 self-start rounded-full border border-hairline bg-card2 px-5 py-2 font-mono text-xs tracking-[0.15em] disabled:opacity-50"
             >
-              ⤓ STAMP MY PASSPORT
+              {stamping ? "STAMPING…" : "⤓ STAMP MY PASSPORT"}
             </button>
           </Tile>
         )}

@@ -395,7 +395,7 @@ export default function Add() {
                 try { sessionStorage.removeItem("heard.addstate.v1"); } catch {}
               }}
               aria-label="Clear search"
-              className="pressable flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-card2 text-[11px] text-sub"
+              className="pressable flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-card2 text-[12px] text-sub"
             >
               ✕
             </button>

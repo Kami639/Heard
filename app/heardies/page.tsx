@@ -30,6 +30,7 @@ export default function Heardies() {
   const [idx, setIdx] = useState(-1); // -1 closed; 0..n ceremony; n done
   const [phase, setPhase] = useState<Phase>("nominees");
   const ceremonyOpen = idx >= 0 && idx < cats.length;
+  const [makingBallot, setMakingBallot] = useState(false);
 
   function advance() {
     if (phase === "nominees") { setPhase("envelope"); setTimeout(() => setPhase("winner"), 1400); return; }
@@ -140,34 +141,52 @@ export default function Heardies() {
             </button>
 
             <div className="grid grid-cols-1 gap-3">
-              {cats.map((c) => (
-                <button
-                  key={c.id}
-                  onClick={() => c.winner.concertId && router.push(`/concert/${c.winner.concertId}`)}
-                  className="reveal flex items-center gap-3 rounded-2xl bg-card p-4 text-left"
-                >
-                  <span className="text-3xl" aria-hidden>{c.icon}</span>
-                  <div className="min-w-0 flex-1">
-                    <p className="text-[11px] font-semibold tracking-wide text-accent">{c.label.toUpperCase()}</p>
-                    <p className="truncate font-display text-[17px] font-extrabold">{c.winner.title}</p>
-                    <p className="truncate text-xs text-sub">{c.winner.sub}</p>
-                    {c.nominees.length > 0 && (
-                      <p className="truncate pt-0.5 text-[10px] text-sub">
-                        over {c.nominees.map((n) => n.title).join(", ")}
-                      </p>
-                    )}
+              {cats.map((c) => {
+                const body = (
+                  <>
+                    <span className="text-3xl" aria-hidden>{c.icon}</span>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-[11px] font-semibold tracking-wide text-accent">{c.label.toUpperCase()}</p>
+                      <p className="truncate font-display text-[17px] font-extrabold">{c.winner.title}</p>
+                      <p className="truncate text-xs text-sub">{c.winner.sub}</p>
+                      {c.nominees.length > 0 && (
+                        <p className="truncate pt-0.5 text-[10px] text-sub">
+                          over {c.nominees.map((n) => n.title).join(", ")}
+                        </p>
+                      )}
+                    </div>
+                  </>
+                );
+                return c.winner.concertId ? (
+                  <button
+                    key={c.id}
+                    onClick={() => router.push(`/concert/${c.winner.concertId}`)}
+                    className="pressable reveal flex items-center gap-3 rounded-2xl bg-card p-4 text-left"
+                  >
+                    {body}
+                    <span className="shrink-0 text-sub" aria-hidden>▸</span>
+                  </button>
+                ) : (
+                  <div key={c.id} className="reveal flex items-center gap-3 rounded-2xl bg-card p-4">
+                    {body}
                   </div>
-                </button>
-              ))}
+                );
+              })}
             </div>
 
             <button
-              onClick={() => downloadHeardiesCard(yearLabel, cats.map((c) => ({
-                icon: c.icon, label: c.label, winner: c.winner.title,
-              })))}
-              className="pressable mx-auto rounded-full border border-hairline bg-card px-6 py-2.5 font-mono text-xs tracking-[0.15em]"
+              disabled={makingBallot}
+              onClick={async () => {
+                setMakingBallot(true);
+                try {
+                  await downloadHeardiesCard(yearLabel, cats.map((c) => ({
+                    icon: c.icon, label: c.label, winner: c.winner.title,
+                  })));
+                } finally { setMakingBallot(false); }
+              }}
+              className="pressable mx-auto rounded-full border border-hairline bg-card px-6 py-2.5 font-mono text-xs tracking-[0.15em] disabled:opacity-50"
             >
-              ⤓ SHARE THE BALLOT
+              {makingBallot ? "MAKING…" : "⤓ SHARE THE BALLOT"}
             </button>
           </>
         )}
